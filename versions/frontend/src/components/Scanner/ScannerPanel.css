@@ -1,0 +1,226 @@
+/* Scanner Panel Layout */
+
+.scanner-panel-container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+/* Idle Dropzone */
+.scanner-dropzone {
+  border: 3px dashed var(--dot-grid);
+  border-radius: var(--radius-panel);
+  padding: 32px 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  background-color: rgba(34, 34, 42, 0.01);
+  transition: all 150ms ease-out;
+  text-align: center;
+}
+
+.scanner-dropzone:hover {
+  background-color: rgba(208, 16, 18, 0.03);
+  border-color: var(--brick-red);
+}
+
+.dropzone-circle {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background-color: rgba(34, 34, 42, 0.05);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--grey-600);
+  margin-bottom: 16px;
+  transition: all 150ms ease-out;
+}
+
+.scanner-dropzone:hover .dropzone-circle {
+  background-color: var(--brick-red);
+  color: var(--white);
+}
+
+.scanner-dropzone h4 {
+  font-size: 1.15rem;
+  font-weight: 800;
+  margin-bottom: 6px;
+}
+
+.scanner-dropzone p {
+  font-size: 0.85rem;
+  color: var(--grey-600);
+}
+
+/* Demo Preset Scans */
+.demo-scans-section {
+  margin-top: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.demo-label {
+  font-weight: 700;
+  font-size: 0.9rem;
+  color: var(--grey-600);
+}
+
+.demo-buttons-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+}
+
+.demo-scan-btn {
+  background-color: var(--white);
+  border: 2px solid var(--ink-900);
+  border-radius: var(--radius-card);
+  padding: 8px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 3px 0 var(--ink-900);
+  transition: transform 100ms ease, box-shadow 100ms ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.demo-scan-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 0 var(--ink-900);
+}
+
+.demo-scan-btn:active {
+  transform: translateY(2px);
+  box-shadow: 0 1px 0 var(--ink-900);
+}
+
+.demo-buttons-grid button:last-child {
+  grid-column: span 2;
+}
+
+/* Scanner Results */
+.scanner-results-state {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.results-header-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 2px dashed var(--dot-grid);
+  padding-bottom: 12px;
+}
+
+.results-header-actions h4 {
+  font-weight: 800;
+  font-size: 1.1rem;
+}
+
+.header-action-buttons {
+  display: flex;
+  gap: 8px;
+}
+
+.candidates-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-height: 320px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.candidate-card {
+  box-shadow: none !important;
+}
+
+.candidate-card-layout {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+}
+
+.candidate-image-wrapper {
+  width: 70px;
+  height: 70px;
+  border: 2px solid var(--ink-900);
+  border-radius: 8px;
+  padding: 4px;
+  background-color: var(--cream-100);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.candidate-part-img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+.candidate-info-wrapper {
+  flex: 1;
+}
+
+.candidate-header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 4px;
+}
+
+.candidate-category {
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--grey-600);
+}
+
+.confidence-badge {
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background-color: rgba(34, 34, 42, 0.05);
+  border: 1px solid var(--ink-900);
+}
+
+.confidence-badge.high {
+  background-color: rgba(30, 122, 52, 0.1);
+  color: var(--brick-green);
+  border-color: var(--brick-green);
+}
+
+.candidate-name {
+  font-size: 0.95rem;
+  font-weight: 800;
+  margin-bottom: 8px;
+  line-height: 1.2;
+}
+
+.candidate-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.added-badge {
+  font-size: 0.85rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.inline {
+  display: inline-block;
+  vertical-align: middle;
+}

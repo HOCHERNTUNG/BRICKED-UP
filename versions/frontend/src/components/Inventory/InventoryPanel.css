@@ -1,0 +1,239 @@
+/* Inventory Panel Layout and Container Responsiveness */
+
+.inventory-panel-container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  gap: 12px;
+}
+
+/* Search and Filters */
+.inventory-header-search {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.search-box-wrapper {
+  position: relative;
+  flex: 1;
+}
+
+.search-icon {
+  position: absolute;
+  left: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--grey-600);
+}
+
+.search-input {
+  width: 100%;
+  border: 2px solid var(--ink-900);
+  border-radius: 8px;
+  padding: 6px 12px 6px 32px;
+  font-size: 0.85rem;
+  background-color: var(--white);
+  outline: none;
+}
+
+.category-select-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.filter-icon {
+  position: absolute;
+  left: 8px;
+  color: var(--grey-600);
+  pointer-events: none;
+}
+
+.category-select {
+  border: 2px solid var(--ink-900);
+  border-radius: 8px;
+  padding: 6px 8px 6px 26px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  background-color: var(--white);
+  outline: none;
+  cursor: pointer;
+}
+
+/* Running Total Bar */
+.inventory-running-totals {
+  display: flex;
+  justify-content: space-between;
+  background-color: rgba(34, 34, 42, 0.05);
+  border-radius: var(--radius-card);
+  padding: 8px 12px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--grey-600);
+  border: 2px solid var(--ink-900);
+}
+
+/* Items Grid */
+.inventory-items-grid {
+  display: grid;
+  gap: 12px;
+  overflow-y: auto;
+  flex: 1;
+  padding-right: 4px;
+}
+
+/* Container query responsiveness */
+.width-narrow .inventory-items-grid {
+  grid-template-columns: 1fr;
+}
+
+.width-medium .inventory-items-grid {
+  grid-template-columns: repeat(2, 1fr);
+}
+
+.width-wide .inventory-items-grid {
+  grid-template-columns: repeat(3, 1fr);
+}
+
+/* Card Styling */
+.inventory-part-card {
+  box-shadow: none !important;
+  border-radius: var(--radius-card) !important;
+  background-color: var(--bg-card);
+  transition: transform var(--hover-ease);
+}
+
+.inventory-part-card:hover {
+  transform: translateY(-2px);
+}
+
+.part-card-inner {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+/* Narrow linear display */
+.width-narrow .part-card-inner {
+  flex-direction: row;
+  align-items: center;
+  gap: 12px;
+}
+
+.part-img-holder {
+  width: 100%;
+  height: 90px;
+  background-color: var(--cream-100);
+  border-bottom: 2px solid var(--ink-900);
+  padding: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.width-narrow .part-img-holder {
+  width: 64px;
+  height: 64px;
+  border-bottom: none;
+  border-right: 2px solid var(--ink-900);
+  border-radius: 8px 0 0 8px;
+  flex-shrink: 0;
+}
+
+.part-img-holder img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+.part-card-content {
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  flex: 1;
+}
+
+.part-meta-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 4px;
+}
+
+.part-badge-cat {
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--grey-600);
+}
+
+.part-display-name {
+  font-size: 0.85rem;
+  font-weight: 800;
+  color: var(--ink-900);
+  margin-bottom: 8px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.part-card-footer-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: auto;
+}
+
+/* Qty Picker */
+.qty-picker {
+  display: flex;
+  align-items: center;
+  border: 2px solid var(--ink-900);
+  border-radius: 6px;
+  background-color: var(--white);
+  overflow: hidden;
+}
+
+.qty-picker-btn {
+  background: transparent;
+  border: none;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: var(--ink-900);
+}
+
+.qty-picker-btn:hover {
+  background-color: rgba(34, 34, 42, 0.05);
+}
+
+.qty-value {
+  padding: 0 6px;
+  font-size: 0.8rem;
+  font-weight: 800;
+  min-width: 18px;
+  text-align: center;
+  border-left: 2px solid var(--ink-900);
+  border-right: 2px solid var(--ink-900);
+}
+
+/* Delete Trash Button */
+.part-delete-btn {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: var(--grey-600);
+  padding: 4px;
+  border-radius: 4px;
+  transition: color 100ms ease;
+}
+
+.part-delete-btn:hover {
+  color: var(--brick-red);
+}

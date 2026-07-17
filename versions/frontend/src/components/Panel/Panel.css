@@ -1,0 +1,175 @@
+/* Panel Layout & Styling */
+
+.panel-chrome {
+  background-color: var(--bg-card);
+  border: 4px solid var(--ink-900);
+  border-radius: var(--radius-panel);
+  box-shadow: var(--panel-shadow);
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+  position: relative;
+  transition: box-shadow var(--hover-ease), border-color var(--hover-ease);
+}
+
+.panel-chrome.dragging {
+  opacity: 0.95;
+  cursor: grabbing;
+}
+
+.panel-chrome.collapsed {
+  height: 54px !important;
+}
+
+/* Snap Ghost */
+.panel-snap-ghost {
+  position: absolute;
+  top: 0;
+  left: 0;
+  border: 3px dashed var(--ink-900);
+  border-radius: var(--radius-panel);
+  background-color: rgba(34, 34, 42, 0.08);
+  pointer-events: none;
+  transition: transform var(--snap-ease), width var(--snap-ease), height var(--snap-ease);
+  box-sizing: border-box;
+}
+
+/* Header Bar */
+.panel-header {
+  height: 50px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 20px;
+  cursor: grab;
+  color: var(--white);
+  border-bottom: 4px solid var(--ink-900);
+  user-select: none;
+}
+
+.panel-chrome.collapsed .panel-header {
+  border-bottom: none;
+}
+
+.panel-header:active {
+  cursor: grabbing;
+}
+
+.panel-title {
+  font-size: 1.15rem;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+}
+
+.panel-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.panel-btn {
+  background: var(--white);
+  border: 2px solid var(--ink-900);
+  border-radius: 6px;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: var(--ink-900);
+  padding: 0;
+  transition: transform 100ms ease, box-shadow 100ms ease;
+  box-shadow: 0 2px 0 var(--ink-900);
+}
+
+.panel-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 3px 0 var(--ink-900);
+}
+
+.panel-btn:active {
+  transform: translateY(1.5px);
+  box-shadow: 0 0.5px 0 var(--ink-900);
+}
+
+.panel-btn.close {
+  background-color: var(--brick-red);
+  color: var(--white);
+}
+
+/* Accent Borders and Headers */
+.border-scanner {
+  border-color: var(--brick-red);
+}
+.border-scanner .panel-header {
+  background-color: var(--brick-red);
+  border-bottom-color: var(--brick-red);
+}
+.border-scanner .panel-btn {
+  color: var(--brick-red);
+}
+.border-scanner .panel-btn.close {
+  color: var(--white);
+  background-color: var(--ink-900);
+}
+
+.border-inventory {
+  border-color: var(--brick-blue);
+}
+.border-inventory .panel-header {
+  background-color: var(--brick-blue);
+  border-bottom-color: var(--brick-blue);
+}
+.border-inventory .panel-btn {
+  color: var(--brick-blue);
+}
+.border-inventory .panel-btn.close {
+  color: var(--white);
+  background-color: var(--ink-900);
+}
+
+.border-builds {
+  border-color: var(--brick-purple);
+}
+.border-builds .panel-header {
+  background-color: var(--brick-purple);
+  border-bottom-color: var(--brick-purple);
+}
+.border-builds .panel-btn {
+  color: var(--brick-purple);
+}
+.border-builds .panel-btn.close {
+  color: var(--white);
+  background-color: var(--ink-900);
+}
+
+/* Panel Body */
+.panel-body-content {
+  flex: 1;
+  padding: 16px;
+  overflow-y: auto;
+  background-color: var(--bg-card);
+  height: calc(100% - 50px);
+}
+
+/* Custom Resize Handle styling to look like LEGO ridges */
+.react-resizable-handle-se {
+  width: 20px !important;
+  height: 20px !important;
+  right: 6px !important;
+  bottom: 6px !important;
+  background-image: radial-gradient(var(--ink-900) 2.5px, transparent 2.5px) !important;
+  background-size: 8px 8px !important;
+  background-repeat: repeat !important;
+  cursor: se-resize !important;
+  opacity: 0.7;
+  transition: opacity 150ms ease;
+  border-radius: 4px;
+}
+
+.react-resizable-handle-se:hover {
+  opacity: 1;
+}

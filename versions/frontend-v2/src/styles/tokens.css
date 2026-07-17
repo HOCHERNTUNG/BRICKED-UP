@@ -1,0 +1,30 @@
+:root {
+  /* Color */
+  --ink-900:   #22222A;   /* top bar, panel borders, primary text, docked action bar */
+  --cream-100: #F6F1E4;   /* workspace background */
+  --dot-grid:  #DCD4C0;   /* background stud pattern, low contrast on cream-100 */
+  --brick-red:    #D01012; /* primary accent — important actions, Scanner header */
+  --brick-yellow: #FFD500; /* highlight accent — logo mark, active/selected states */
+  --brick-blue:   #0057A6; /* Inventory header, informational accents */
+  --brick-green:  #1E7A34; /* success, "add to bin" confirm, progress fills */
+  --brick-purple: #5E1E9A; /* Build Ideas accent, tags/badges */
+  --grey-600: #5B5B66;    /* secondary/help text */
+  --white:    #FFFFFF;
+
+  /* Type */
+  --font-display: "Baloo 2", "Nunito", system-ui, sans-serif;  /* headings, panel titles, action bar */
+  --font-body: "Inter", system-ui, sans-serif;                  /* dense text: inventory lists, forms */
+
+  /* Grid & spacing */
+  --grid-unit: 8px;
+  --snap-unit: 32px;       /* panel position/size snap increment — matches dot spacing */
+  --dot-spacing: 32px;
+
+  /* Radius */
+  --radius-panel: 22px;
+  --radius-card: 14px;
+  --radius-pill: 999px;
+  
+  /* Motion */
+  --snap-ease: 180ms cubic-bezier(0.22, 1, 0.36, 1);
+}

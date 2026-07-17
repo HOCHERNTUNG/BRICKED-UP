@@ -1,0 +1,15 @@
+// js/api/client.js
+
+// By default, the vanilla project runs in mocked mode.
+// Swapping is done by updating these variables.
+export const IS_MOCKED = true;
+export const API_BASE_URL = '';
+
+/**
+ * Creates Authorization header helper
+ * @param {string} idToken - Cognito token
+ * @returns {object} Auth headers
+ */
+export function authHeader(idToken) {
+  return idToken ? { Authorization: `Bearer ${idToken}` } : {};
+}

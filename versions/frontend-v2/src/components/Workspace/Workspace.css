@@ -1,0 +1,10 @@
+.workspace {
+  width: 100vw;
+  height: 100vh;
+  position: relative;
+  background-color: var(--cream-100);
+  background-image: radial-gradient(var(--dot-grid) 3px, transparent 3px);
+  background-size: var(--dot-spacing) var(--dot-spacing);
+  background-position: 0 0;
+  overflow: hidden;
+}

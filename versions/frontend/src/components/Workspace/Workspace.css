@@ -1,0 +1,51 @@
+/* Workspace Canvas & Grid Patterns */
+
+.workspace-container {
+  position: relative;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  background-color: var(--cream-100);
+  transition: background-color var(--hover-ease);
+}
+
+.workspace-baseplate {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.workspace-dots {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+/* Baseplate Studs: Circular (Classic LEGO Baseplate) */
+[data-studs="circular"] .workspace-dots {
+  background-image: radial-gradient(var(--dot-grid) 2px, transparent 2px);
+  background-size: var(--dot-spacing) var(--dot-spacing);
+}
+
+/* Baseplate Studs: Rounded Square (Unique Modern Grid) */
+[data-studs="rounded-square"] .workspace-dots {
+  background-size: var(--dot-spacing) var(--dot-spacing);
+}
+
+/* Color overrides for the SVG repeating rounded-square studs */
+[data-theme="classic"][data-studs="rounded-square"] .workspace-dots {
+  background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32"><rect x="13.5" y="13.5" width="5" height="5" rx="1.5" fill="%23DCD4C0"/></svg>');
+}
+
+[data-theme="space-explorer"][data-studs="rounded-square"] .workspace-dots {
+  background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32"><rect x="13.5" y="13.5" width="5" height="5" rx="1.5" fill="%23334155"/></svg>');
+}
+
+[data-theme="neon-cyber"][data-studs="rounded-square"] .workspace-dots {
+  background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32"><rect x="13.5" y="13.5" width="5" height="5" rx="1.5" fill="%234A004A"/></svg>');
+}

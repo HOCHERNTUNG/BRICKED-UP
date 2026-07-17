@@ -1,0 +1,92 @@
+.panel-ghost {
+  position: absolute;
+  top: 0;
+  left: 0;
+  border: 3px dashed var(--grey-600);
+  border-radius: var(--radius-panel);
+  background-color: rgba(91, 91, 102, 0.1);
+  pointer-events: none;
+  transition: all 0.1s ease-out; /* small smoothing on drag */
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .panel-ghost {
+    transition: none;
+  }
+}
+
+.panel-container {
+  display: flex;
+  flex-direction: column;
+}
+
+.panel-wrapper {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  background-color: var(--white);
+  border: 4px solid var(--ink-900);
+  border-radius: var(--radius-panel);
+  box-shadow: 0 6px 20px rgba(34, 34, 42, 0.15);
+  overflow: hidden;
+  transition: box-shadow 0.2s ease;
+}
+
+.panel-container.is-dragging .panel-wrapper {
+  box-shadow: 0 12px 30px rgba(34, 34, 42, 0.25);
+  opacity: 0.9;
+}
+
+.panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 48px;
+  padding: 0 16px;
+  background-color: var(--panel-accent);
+  color: var(--white);
+  cursor: grab;
+  user-select: none;
+  border-bottom: 4px solid var(--ink-900);
+}
+
+.panel-container.is-dragging .panel-header {
+  cursor: grabbing;
+}
+
+.panel-title {
+  font-size: 1.1rem;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  margin: 0;
+}
+
+.panel-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.panel-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  color: var(--white);
+  background-color: transparent;
+  transition: background-color 0.2s ease;
+}
+
+.panel-btn:hover {
+  background-color: rgba(255, 255, 255, 0.2);
+}
+
+.panel-content {
+  flex: 1;
+  overflow: auto;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}

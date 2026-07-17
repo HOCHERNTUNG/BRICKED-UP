@@ -1,0 +1,3373 @@
+(() => {
+  // js/api/client.js
+  var IS_MOCKED = true;
+  var API_BASE_URL = "";
+  var activeToken = null;
+  function setActiveToken(token) {
+    activeToken = token;
+  }
+  function authHeader(idToken) {
+    const token = idToken || activeToken;
+    return token ? { Authorization: `Bearer ${token}` } : {};
+  }
+
+  // js/api/auth.js
+  var currentUser = null;
+  var sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+  async function signUp({ email, password, displayName }) {
+    if (!IS_MOCKED) {
+      const res = await fetch(`${API_BASE_URL}/auth/signup`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password, displayName })
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.message || "Registration failed");
+      }
+      return await res.json();
+    }
+    await sleep(800);
+    if (!email || !password || !displayName) {
+      throw new Error("Please fill in all details");
+    }
+    if (password.length < 6) {
+      throw new Error("Password must be at least 6 characters");
+    }
+    const userSub = "usr_" + Math.random().toString(36).substr(2, 9);
+    return { userSub };
+  }
+  async function signIn({ email, password }) {
+    if (!IS_MOCKED) {
+      const res = await fetch(`${API_BASE_URL}/auth/signin`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password })
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.message || "Login failed");
+      }
+      const result = await res.json();
+      currentUser = result.user;
+      setActiveToken(result.idToken);
+      return result;
+    }
+    await sleep(1e3);
+    if (!email || !password) {
+      throw new Error("Email and password are required");
+    }
+    if (!email.includes("@")) {
+      throw new Error("Invalid email address");
+    }
+    const user_id = "usr_mocked_id_99";
+    const display_name = email.split("@")[0];
+    currentUser = {
+      user_id,
+      email,
+      display_name: display_name.charAt(0).toUpperCase() + display_name.slice(1)
+    };
+    const idToken = "jwt_mocked_token_" + Math.random().toString(36).substr(2, 9);
+    setActiveToken(idToken);
+    return {
+      idToken,
+      user: currentUser
+    };
+  }
+  async function signOut() {
+    if (!IS_MOCKED) {
+      try {
+        await fetch(`${API_BASE_URL}/auth/signout`, {
+          method: "POST",
+          headers: { ...authHeader() }
+        });
+      } catch (e) {
+      }
+      currentUser = null;
+      setActiveToken(null);
+      return { success: true };
+    }
+    await sleep(400);
+    currentUser = null;
+    setActiveToken(null);
+    return { success: true };
+  }
+  async function getCurrentUser() {
+    if (!IS_MOCKED) {
+      if (currentUser) return currentUser;
+      try {
+        const res = await fetch(`${API_BASE_URL}/auth/me`, {
+          headers: { ...authHeader() }
+        });
+        if (res.ok) {
+          currentUser = await res.json();
+          return currentUser;
+        }
+      } catch (e) {
+      }
+      return null;
+    }
+    await sleep(200);
+    return currentUser;
+  }
+
+  // js/hooks/state.js
+  function computeDefaultPanels() {
+    const vw = window.innerWidth || 1280;
+    const vh = window.innerHeight || 800;
+    const scannerW = 384, scannerH = 480;
+    const inventoryW = 561, inventoryH = 512;
+    const buildsW = 384, buildsH = 512;
+    const totalW = scannerW + inventoryW + buildsW;
+    const gap = 24;
+    const totalWithGaps = totalW + gap * 2;
+    let startX = Math.max(16, Math.floor((vw - totalWithGaps) / 2));
+    let startY = Math.max(16, Math.floor((vh - Math.max(scannerH, inventoryH, buildsH)) / 2));
+    return {
+      scanner: {
+        id: "scanner",
+        name: "Scanner Panel",
+        x: startX,
+        y: startY,
+        width: scannerW,
+        height: scannerH,
+        zIndex: 10,
+        isOpen: true,
+        isCollapsed: false,
+        accentClass: "border-scanner"
+      },
+      inventory: {
+        id: "inventory",
+        name: "Inventory",
+        x: startX + scannerW + gap,
+        y: startY,
+        width: inventoryW,
+        height: inventoryH,
+        zIndex: 10,
+        isOpen: true,
+        isCollapsed: false,
+        accentClass: "border-inventory"
+      },
+      buildIdeas: {
+        id: "buildIdeas",
+        name: "Build Ideas",
+        x: startX + scannerW + gap + inventoryW + gap,
+        y: startY,
+        width: buildsW,
+        height: buildsH,
+        zIndex: 10,
+        isOpen: true,
+        isCollapsed: false,
+        accentClass: "border-builds"
+      }
+    };
+  }
+  var state = {
+    user: null,
+    idToken: null,
+    isLoading: false,
+    panels: computeDefaultPanels(),
+    maxZIndex: 10,
+    theme: "classic",
+    studStyle: "circular",
+    hctPatternEnabled: false,
+    inventoryRefreshKey: 0,
+    isSettingsOpen: false,
+    snapEnabled: true,
+    soundEnabled: true
+  };
+  var listeners = /* @__PURE__ */ new Set();
+  function getState() {
+    return state;
+  }
+  function subscribe(callback) {
+    listeners.add(callback);
+    return () => listeners.delete(callback);
+  }
+  function notify(isPositionOnly = false) {
+    listeners.forEach((cb) => cb(state, isPositionOnly));
+  }
+  function setUser(user, idToken = null) {
+    state.user = user;
+    state.idToken = idToken;
+    notify();
+  }
+  function setIsLoading(loading) {
+    state.isLoading = loading;
+    notify();
+  }
+  function setTheme(newTheme) {
+    state.theme = newTheme;
+    notify();
+  }
+  function setStudStyle(newStyle) {
+    state.studStyle = newStyle;
+    notify();
+  }
+  function triggerInventoryUpdate() {
+    state.inventoryRefreshKey++;
+    notify();
+  }
+  function bringToFront(id) {
+    let highestZ = 0;
+    for (const key in state.panels) {
+      if (state.panels[key].isOpen && state.panels[key].zIndex > highestZ) {
+        highestZ = state.panels[key].zIndex;
+      }
+    }
+    if (state.panels[id].zIndex >= highestZ && highestZ > 0) {
+      return;
+    }
+    state.maxZIndex = highestZ + 1;
+    state.panels[id].zIndex = state.maxZIndex;
+    const panelDom = document.getElementById(`panel-${id}`);
+    if (panelDom) {
+      panelDom.style.zIndex = state.maxZIndex;
+    }
+  }
+  function openPanel(id) {
+    state.maxZIndex++;
+    state.panels[id].isOpen = true;
+    state.panels[id].zIndex = state.maxZIndex;
+    notify();
+  }
+  function closePanel(id) {
+    if (id.startsWith("standalone-")) {
+      delete state.panels[id];
+    } else {
+      state.panels[id].isOpen = false;
+    }
+    notify();
+  }
+  function parsePartNameAndColor(fullName) {
+    if (!fullName) return { name: "Part", color: "Generic" };
+    const match = fullName.match(/^(.*?)\s*\((.*?)\)$/);
+    if (match) {
+      return {
+        name: match[1],
+        color: match[2]
+      };
+    }
+    return {
+      name: fullName,
+      color: "Generic"
+    };
+  }
+  function spawnStandalonePanel(type, data) {
+    const rawId = data.build_id !== void 0 ? data.build_id : data.part_id || data.part_num || data.id || Math.random().toString(36).substr(2, 9);
+    const cleanId = String(rawId).replace(/[^a-zA-Z0-9-]/g, "_");
+    const id = `standalone-${type}-${cleanId}`;
+    if (state.panels[id]) {
+      state.panels[id].isOpen = true;
+      bringToFront(id);
+      notify();
+      return;
+    }
+    const count = Object.keys(state.panels).filter((k) => k.startsWith("standalone-")).length;
+    const x = 200 + count * 32 % 400;
+    const y = 100 + count * 32 % 300;
+    const width = type === "build" ? 420 : type === "addPart" ? 330 : 310;
+    const height = type === "build" ? 480 : type === "addPart" ? 360 : 250;
+    const accentClass = type === "build" ? "border-builds" : "border-inventory";
+    const parsed = type === "part" ? parsePartNameAndColor(data.part_name) : null;
+    const name = type === "build" ? `Build Reference: ${data.name}` : type === "addPart" ? "Add Piece Manually" : `${parsed ? parsed.name : "Part " + data.part_num}`;
+    state.maxZIndex++;
+    state.panels[id] = {
+      id,
+      type,
+      name,
+      data,
+      x,
+      y,
+      width,
+      height,
+      zIndex: state.maxZIndex,
+      isOpen: true,
+      isCollapsed: false,
+      accentClass
+    };
+    notify();
+  }
+  function togglePanel(id) {
+    if (state.panels[id].isOpen) {
+      closePanel(id);
+    } else {
+      openPanel(id);
+    }
+  }
+  function toggleCollapse(id) {
+    state.panels[id].isCollapsed = !state.panels[id].isCollapsed;
+    notify();
+  }
+  function updatePanelGeometry(id, geom) {
+    const panel = state.panels[id];
+    if (!panel) return;
+    if (geom.x !== void 0) panel.x = geom.x;
+    if (geom.y !== void 0) panel.y = geom.y;
+    if (geom.width !== void 0) panel.width = geom.width;
+    if (geom.height !== void 0) panel.height = geom.height;
+    notify(true);
+  }
+  function resetWorkspace() {
+    state.panels = computeDefaultPanels();
+    state.maxZIndex = 10;
+    state.theme = "classic";
+    state.studStyle = "circular";
+    notify();
+  }
+  async function signOut2() {
+    try {
+      await signOut();
+    } catch (err) {
+      console.error(err);
+    } finally {
+      resetWorkspace();
+      setUser(null);
+    }
+  }
+  function openAllPanels() {
+    state.maxZIndex++;
+    state.panels["scanner"].isOpen = true;
+    state.panels["scanner"].zIndex = state.maxZIndex;
+    state.panels["scanner"].isCollapsed = false;
+    state.maxZIndex++;
+    state.panels["inventory"].isOpen = true;
+    state.panels["inventory"].zIndex = state.maxZIndex;
+    state.panels["inventory"].isCollapsed = false;
+    state.maxZIndex++;
+    state.panels["buildIdeas"].isOpen = true;
+    state.panels["buildIdeas"].zIndex = state.maxZIndex;
+    state.panels["buildIdeas"].isCollapsed = false;
+    notify();
+  }
+  function closeSettings() {
+    state.isSettingsOpen = false;
+    notify();
+  }
+  function toggleSettings() {
+    state.isSettingsOpen = !state.isSettingsOpen;
+    notify();
+  }
+  function toggleHctPattern() {
+    state.hctPatternEnabled = !state.hctPatternEnabled;
+    notify(true);
+  }
+  function toggleSnapEnabled() {
+    state.snapEnabled = !state.snapEnabled;
+    notify();
+  }
+  function toggleSoundEnabled() {
+    state.soundEnabled = !state.soundEnabled;
+    notify();
+  }
+
+  // js/components/auth.js
+  var isSignUpMode = false;
+  var authLoading = false;
+  var authErrorMsg = null;
+  var authSuccessMsg = null;
+  var emailValue = "";
+  var passwordValue = "";
+  var displayNameValue = "";
+  var activeCancelAnimation = null;
+  function renderAuth(parentEl) {
+    if (activeCancelAnimation) {
+      activeCancelAnimation();
+      activeCancelAnimation = null;
+    }
+    parentEl.innerHTML = "";
+    const canvas = document.createElement("canvas");
+    canvas.className = "auth-bg-canvas";
+    parentEl.appendChild(canvas);
+    activeCancelAnimation = initBrickTunnelAnimation(canvas);
+    const container = document.createElement("div");
+    container.className = "auth-screen-container";
+    const card = document.createElement("div");
+    card.className = "brick-card auth-card";
+    const cardBody = document.createElement("div");
+    cardBody.className = "brick-card-body";
+    const logo = document.createElement("div");
+    logo.className = "auth-logo-section";
+    logo.innerHTML = `
+    <img src="assets/logo_name.png" alt="BRICKED-UP" class="auth-logo-image" style="max-height: 90px; width: auto; display: block; margin: 0 auto 20px auto;" />
+    <p class="logo-subtitle font-display" style="font-size: 0.95rem; letter-spacing: 0.5px; opacity: 0.85;">LEGO Parts Scanner &amp; Bin Manager</p>
+  `;
+    cardBody.appendChild(logo);
+    if (authLoading) {
+      const spinner = document.createElement("div");
+      spinner.className = "brick-spinner-container";
+      spinner.innerHTML = `
+      <div class="brick-stud-spinner">
+        <div class="stud-spinner-top"></div>
+        <div class="stud-spinner-body"></div>
+      </div>
+      <p class="brick-spinner-message font-display">${isSignUpMode ? "Building account..." : "Logging in..."}</p>
+    `;
+      cardBody.appendChild(spinner);
+    } else {
+      const form = document.createElement("form");
+      form.className = "auth-form font-body";
+      if (authErrorMsg) {
+        const errBox = document.createElement("div");
+        errBox.className = "auth-error font-display";
+        errBox.textContent = authErrorMsg;
+        form.appendChild(errBox);
+      }
+      if (authSuccessMsg) {
+        const succBox = document.createElement("div");
+        succBox.className = "auth-success font-display";
+        succBox.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline-block;vertical-align:middle;margin-right:4px"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>${authSuccessMsg}`;
+        form.appendChild(succBox);
+      }
+      if (isSignUpMode) {
+        form.appendChild(createInputGroup("Display Name", "text", "displayName", "MasterBuilder", displayNameValue, `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>`));
+      }
+      form.appendChild(createInputGroup("Email Address", "email", "email", "builder@lego.com", emailValue, `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg>`));
+      form.appendChild(createInputGroup("Password", "password", "password", "******", passwordValue, `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>`));
+      const submitBtn = document.createElement("button");
+      submitBtn.type = "submit";
+      submitBtn.className = "brick-btn brick-btn-primary auth-submit-btn font-display";
+      submitBtn.textContent = isSignUpMode ? "Build Account" : "Sign In";
+      form.appendChild(submitBtn);
+      const togglePrompt = document.createElement("div");
+      togglePrompt.className = "auth-toggle-prompt";
+      togglePrompt.innerHTML = `
+      <span>${isSignUpMode ? "Already a builder?" : "New to Bricked-Up?"}</span>
+      <button type="button" class="auth-toggle-link font-display" id="auth-mode-toggle-link">
+        ${isSignUpMode ? "Login Here" : "Create Account"}
+      </button>
+    `;
+      form.appendChild(togglePrompt);
+      form.onsubmit = async (e) => {
+        e.preventDefault();
+        authErrorMsg = null;
+        authSuccessMsg = null;
+        emailValue = form.querySelector('[name="email"]').value;
+        passwordValue = form.querySelector('[name="password"]').value;
+        if (isSignUpMode) {
+          displayNameValue = form.querySelector('[name="displayName"]').value;
+        }
+        if (!emailValue || !passwordValue || isSignUpMode && !displayNameValue) {
+          authErrorMsg = "Please fill in all bricks of the form.";
+          renderAuth(parentEl);
+          return;
+        }
+        if (passwordValue.length < 6) {
+          authErrorMsg = "Password must be at least 6 blocks long.";
+          renderAuth(parentEl);
+          return;
+        }
+        authLoading = true;
+        renderAuth(parentEl);
+        try {
+          if (isSignUpMode) {
+            await signUp({ email: emailValue, password: passwordValue, displayName: displayNameValue });
+            authSuccessMsg = "Account created successfully! Please sign in.";
+            isSignUpMode = false;
+            passwordValue = "";
+            authErrorMsg = null;
+          } else {
+            const result = await signIn({ email: emailValue, password: passwordValue });
+            setUser(result.user, result.idToken);
+          }
+        } catch (err) {
+          console.error("Auth or rendering error:", err);
+          authErrorMsg = err.message || "Authentication failed. Please verify credentials.";
+          authLoading = false;
+          setUser(null);
+          renderAuth(parentEl);
+        } finally {
+          if (!getState().user) {
+            authLoading = false;
+            renderAuth(parentEl);
+          }
+        }
+      };
+      form.querySelector("#auth-mode-toggle-link").onclick = () => {
+        isSignUpMode = !isSignUpMode;
+        authErrorMsg = null;
+        authSuccessMsg = null;
+        renderAuth(parentEl);
+      };
+      cardBody.appendChild(form);
+    }
+    card.appendChild(cardBody);
+    container.appendChild(card);
+    parentEl.appendChild(container);
+  }
+  function createInputGroup(label, type, name, placeholder, value, iconHtml) {
+    const group = document.createElement("div");
+    group.className = "input-group";
+    const isPassword = name === "password";
+    group.innerHTML = `
+    <label class="input-label font-display">${label}</label>
+    <div class="input-wrapper">
+      <span class="input-icon">${iconHtml}</span>
+      <input type="${type}" name="${name}" class="auth-input" placeholder="${placeholder}" value="${value}" />
+      ${isPassword ? '<button type="button" class="password-peek-btn" aria-label="Show password" title="Show password">\u{1F441}</button>' : ""}
+    </div>
+  `;
+    if (isPassword) {
+      const input = group.querySelector("input");
+      const button = group.querySelector(".password-peek-btn");
+      button.addEventListener("click", () => {
+        const nextType = input.type === "password" ? "text" : "password";
+        input.type = nextType;
+        button.setAttribute("aria-label", nextType === "password" ? "Show password" : "Hide password");
+        button.title = nextType === "password" ? "Show password" : "Hide password";
+        button.textContent = nextType === "password" ? "\u{1F441}" : "\u{1F648}";
+      });
+    }
+    return group;
+  }
+  function initBrickTunnelAnimation(canvas) {
+    const ctx = canvas.getContext("2d");
+    let animationFrameId = null;
+    const resize = () => {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+    };
+    window.addEventListener("resize", resize);
+    resize();
+    const numParticles = 120;
+    const particles = [];
+    const speedLines = [];
+    const colors = ["#D01012", "#0057A6", "#FFD500", "#FFFFFF", "#5B5B66", "#1E7A34", "#F97316", "#8B5CF6"];
+    const createParticle = (initZ = false) => {
+      const spreadRadius = 1600;
+      return {
+        x: (Math.random() - 0.5) * spreadRadius,
+        y: (Math.random() - 0.5) * spreadRadius,
+        z: initZ ? Math.random() * 1200 : 1200,
+        size: Math.random() > 0.6 ? { w: 48, h: 24 } : { w: 24, h: 24 },
+        color: colors[Math.floor(Math.random() * colors.length)],
+        angle: Math.random() * Math.PI * 2,
+        rotSpeed: (Math.random() - 0.5) * 0.05
+      };
+    };
+    for (let i = 0; i < numParticles; i++) {
+      particles.push(createParticle(true));
+    }
+    const numSpeedLines = 60;
+    for (let i = 0; i < numSpeedLines; i++) {
+      speedLines.push({
+        angle: Math.random() * Math.PI * 2,
+        innerRadius: 30 + Math.random() * 80,
+        length: 60 + Math.random() * 200,
+        alpha: 0.05 + Math.random() * 0.12,
+        width: 0.5 + Math.random() * 1.5,
+        speed: 3e-3 + Math.random() * 8e-3
+      });
+    }
+    let targetCenterX = window.innerWidth / 2;
+    let targetCenterY = window.innerHeight / 2;
+    let currentCenterX = targetCenterX;
+    let currentCenterY = targetCenterY;
+    const onMouseMove = (e) => {
+      const rx = e.clientX - window.innerWidth / 2;
+      const ry = e.clientY - window.innerHeight / 2;
+      targetCenterX = window.innerWidth / 2 + rx * 0.3;
+      targetCenterY = window.innerHeight / 2 + ry * 0.3;
+    };
+    window.addEventListener("mousemove", onMouseMove);
+    let frameCount = 0;
+    const draw = () => {
+      frameCount++;
+      currentCenterX += (targetCenterX - currentCenterX) * 0.05;
+      currentCenterY += (targetCenterY - currentCenterY) * 0.05;
+      const grad = ctx.createRadialGradient(
+        currentCenterX,
+        currentCenterY,
+        5,
+        currentCenterX,
+        currentCenterY,
+        Math.max(canvas.width, canvas.height)
+      );
+      grad.addColorStop(0, "#1E1E28");
+      grad.addColorStop(0.4, "#111117");
+      grad.addColorStop(1, "#060608");
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      const pulseScale = 1 + Math.sin(frameCount * 0.04) * 0.3;
+      const glowGrad = ctx.createRadialGradient(
+        currentCenterX,
+        currentCenterY,
+        0,
+        currentCenterX,
+        currentCenterY,
+        90 * pulseScale
+      );
+      glowGrad.addColorStop(0, "rgba(255, 213, 0, 0.25)");
+      glowGrad.addColorStop(0.4, "rgba(208, 16, 18, 0.1)");
+      glowGrad.addColorStop(1, "rgba(0, 0, 0, 0)");
+      ctx.fillStyle = glowGrad;
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.save();
+      ctx.translate(currentCenterX, currentCenterY);
+      speedLines.forEach((line) => {
+        line.angle += line.speed;
+        const cos = Math.cos(line.angle);
+        const sin = Math.sin(line.angle);
+        ctx.beginPath();
+        ctx.moveTo(cos * line.innerRadius, sin * line.innerRadius);
+        ctx.lineTo(cos * (line.innerRadius + line.length), sin * (line.innerRadius + line.length));
+        ctx.strokeStyle = `rgba(255, 255, 255, ${line.alpha})`;
+        ctx.lineWidth = line.width;
+        ctx.stroke();
+      });
+      ctx.restore();
+      particles.sort((a, b) => b.z - a.z);
+      particles.forEach((p) => {
+        const zSpeed = 6 + (1 - p.z / 1200) * 10;
+        p.z -= zSpeed;
+        p.angle += p.rotSpeed;
+        if (p.z <= 1) {
+          Object.assign(p, createParticle(false));
+        }
+        const perspective = 280 / p.z;
+        const px = currentCenterX + p.x * perspective;
+        const py = currentCenterY + p.y * perspective;
+        const pw = p.size.w * perspective;
+        const ph = p.size.h * perspective;
+        if (px < -pw * 2 || px > canvas.width + pw * 2 || py < -ph * 2 || py > canvas.height + ph * 2) {
+          return;
+        }
+        const alphaFactor = Math.min(1, Math.max(0.15, 1 - p.z / 1200));
+        ctx.save();
+        ctx.globalAlpha = alphaFactor;
+        ctx.translate(px, py);
+        ctx.rotate(p.angle);
+        ctx.shadowColor = "rgba(0, 0, 0, 0.5)";
+        ctx.shadowBlur = Math.max(3, 10 * perspective);
+        ctx.shadowOffsetX = Math.max(1, 4 * perspective);
+        ctx.shadowOffsetY = Math.max(1, 5 * perspective);
+        ctx.fillStyle = p.color;
+        ctx.strokeStyle = "#000000";
+        ctx.lineWidth = Math.max(1, 2.5 * perspective);
+        ctx.beginPath();
+        const r = Math.max(2, 4 * perspective);
+        if (typeof ctx.roundRect === "function") {
+          ctx.roundRect(-pw / 2, -ph / 2, pw, ph, r);
+        } else {
+          ctx.rect(-pw / 2, -ph / 2, pw, ph);
+        }
+        ctx.fill();
+        ctx.stroke();
+        ctx.shadowColor = "transparent";
+        ctx.fillStyle = "rgba(255, 255, 255, 0.15)";
+        ctx.beginPath();
+        if (typeof ctx.roundRect === "function") {
+          ctx.roundRect(-pw / 2, -ph / 2, pw, ph * 0.4, [r, r, 0, 0]);
+        } else {
+          ctx.rect(-pw / 2, -ph / 2, pw, ph * 0.4);
+        }
+        ctx.fill();
+        const numStuds = p.size.w > 24 ? 4 : 2;
+        const studRadius = 3.8 * perspective;
+        const spacing = pw / numStuds;
+        for (let s = 0; s < numStuds; s++) {
+          const sx = -pw / 2 + spacing * (s + 0.5);
+          const sy = -ph / 2;
+          ctx.fillStyle = p.color;
+          ctx.beginPath();
+          ctx.arc(sx, sy - studRadius * 0.4, studRadius, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.strokeStyle = "#000000";
+          ctx.lineWidth = Math.max(0.5, 1.5 * perspective);
+          ctx.stroke();
+          ctx.fillStyle = "rgba(255, 255, 255, 0.3)";
+          ctx.beginPath();
+          ctx.arc(sx - studRadius * 0.2, sy - studRadius * 0.6, studRadius * 0.3, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        ctx.restore();
+      });
+      const vignette = ctx.createRadialGradient(
+        canvas.width / 2,
+        canvas.height / 2,
+        Math.min(canvas.width, canvas.height) * 0.35,
+        canvas.width / 2,
+        canvas.height / 2,
+        Math.max(canvas.width, canvas.height) * 0.75
+      );
+      vignette.addColorStop(0, "rgba(0,0,0,0)");
+      vignette.addColorStop(1, "rgba(0,0,0,0.65)");
+      ctx.fillStyle = vignette;
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      animationFrameId = requestAnimationFrame(draw);
+    };
+    draw();
+    return () => {
+      cancelAnimationFrame(animationFrameId);
+      window.removeEventListener("resize", resize);
+      window.removeEventListener("mousemove", onMouseMove);
+    };
+  }
+
+  // js/hooks/snap.js
+  function snapToGrid(value, unit = 16) {
+    return Math.round(value / unit) * unit;
+  }
+  function getDockPosition(x, y, barWidth, barHeight, windowWidth, windowHeight) {
+    const distLeft = x;
+    const distRight = windowWidth - (x + barWidth);
+    const distTop = y;
+    const distBottom = windowHeight - (y + barHeight);
+    const minDist = Math.min(distLeft, distRight, distTop, distBottom);
+    let edge = "bottom";
+    let snappedX = x;
+    let snappedY = y;
+    if (minDist === distLeft) {
+      edge = "left";
+      snappedX = 0;
+      snappedY = Math.max(16, Math.min(y, windowHeight - barHeight - 16));
+    } else if (minDist === distRight) {
+      edge = "right";
+      snappedX = windowWidth - barWidth;
+      snappedY = Math.max(16, Math.min(y, windowHeight - barHeight - 16));
+    } else if (minDist === distTop) {
+      edge = "top";
+      snappedX = Math.max(16, Math.min(x, windowWidth - barWidth - 16));
+      snappedY = 0;
+    } else {
+      edge = "bottom";
+      snappedX = Math.max(16, Math.min(x, windowWidth - barWidth - 16));
+      snappedY = windowHeight - barHeight;
+    }
+    return { edge, x: snappedX, y: snappedY };
+  }
+
+  // js/components/panel.js
+  function createPanel(panelState, contentRenderer) {
+    const { id, name, x, y, width, height, zIndex, isOpen, isCollapsed, accentClass } = panelState;
+    if (!isOpen) return null;
+    const container = document.createElement("div");
+    container.className = `panel-container ${isCollapsed ? "is-collapsed" : ""}`;
+    container.id = `panel-${id}`;
+    container.style.left = `${x}px`;
+    container.style.top = `${y}px`;
+    container.style.width = `${width}px`;
+    container.style.height = isCollapsed ? "54px" : `${height}px`;
+    container.style.zIndex = zIndex;
+    const chrome = document.createElement("div");
+    chrome.className = `panel-chrome ${accentClass} ${isCollapsed ? "is-collapsed" : ""}`;
+    const header = document.createElement("div");
+    header.className = "panel-header";
+    const title = document.createElement("span");
+    title.className = "panel-title font-display";
+    title.textContent = name;
+    header.appendChild(title);
+    const controls = document.createElement("div");
+    controls.className = "panel-controls";
+    const collapseBtn = document.createElement("button");
+    collapseBtn.className = "panel-btn";
+    collapseBtn.innerHTML = isCollapsed ? `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect></svg>` : `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="5" y1="12" x2="19" y2="12"></line></svg>`;
+    collapseBtn.onclick = (e) => {
+      e.stopPropagation();
+      toggleCollapse(id);
+    };
+    controls.appendChild(collapseBtn);
+    const closeBtn = document.createElement("button");
+    closeBtn.className = "panel-btn close";
+    closeBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>`;
+    closeBtn.onclick = (e) => {
+      e.stopPropagation();
+      closePanel(id);
+    };
+    controls.appendChild(closeBtn);
+    header.appendChild(controls);
+    chrome.appendChild(header);
+    if (!isCollapsed) {
+      const bodyContent = document.createElement("div");
+      bodyContent.className = "panel-body-content";
+      contentRenderer(bodyContent);
+      chrome.appendChild(bodyContent);
+    }
+    container.appendChild(chrome);
+    const studsRow = document.createElement("div");
+    studsRow.className = "panel-studs-row";
+    updateStudsForWidth(studsRow, width);
+    container.appendChild(studsRow);
+    chrome.addEventListener("mousedown", (e) => {
+      if (e.target.closest("button, input, select, textarea, a, .panel-btn, .qty-picker, .part-delete-btn, .build-card, .scanner-dropzone, .demo-scan-btn, .candidate-card, .back-btn")) {
+        return;
+      }
+      const bodyContent = chrome.querySelector(".panel-body-content");
+      if (bodyContent) {
+        const rect = bodyContent.getBoundingClientRect();
+        if (e.clientX > rect.left && e.clientX < rect.right && e.clientY > rect.top && e.clientY < rect.bottom) {
+          if (e.clientX > rect.left + bodyContent.clientWidth) {
+            return;
+          }
+        }
+      }
+      e.preventDefault();
+      bringToFront(id);
+      chrome.classList.add("is-dragging");
+      const startX = e.clientX;
+      const startY = e.clientY;
+      const startLeft = parseInt(container.style.left);
+      const startTop = parseInt(container.style.top);
+      const snapUnit = getState().snapEnabled ? 16 : 1;
+      const currentPanel = getState().panels[id] || panelState;
+      const currentWidth = currentPanel.width;
+      const currentHeight = currentPanel.height;
+      const currentIsCollapsed = currentPanel.isCollapsed;
+      const ghost = document.createElement("div");
+      ghost.className = "panel-snap-ghost";
+      ghost.style.transform = `translate(${snapToGrid(startLeft, snapUnit)}px, ${snapToGrid(startTop, snapUnit)}px)`;
+      ghost.style.width = `${currentWidth}px`;
+      ghost.style.height = currentIsCollapsed ? "54px" : `${currentHeight}px`;
+      ghost.style.zIndex = zIndex - 1;
+      container.parentElement.appendChild(ghost);
+      let finalLeft = startLeft;
+      let finalTop = startTop;
+      function onMouseMove(moveEvent) {
+        const dx = moveEvent.clientX - startX;
+        const dy = moveEvent.clientY - startY;
+        finalLeft = startLeft + dx;
+        finalTop = startTop + dy;
+        const windowWidth = window.innerWidth;
+        const windowHeight = window.innerHeight;
+        const panelWidth = currentWidth;
+        const panelHeight = currentIsCollapsed ? 54 : currentHeight;
+        finalLeft = Math.max(8, Math.min(finalLeft, windowWidth - panelWidth - 8));
+        finalTop = Math.max(8, Math.min(finalTop, windowHeight - panelHeight - 8));
+        if (getState().snapEnabled) {
+          container.style.left = `${snapToGrid(finalLeft, snapUnit)}px`;
+          container.style.top = `${snapToGrid(finalTop, snapUnit)}px`;
+        } else {
+          container.style.left = `${finalLeft}px`;
+          container.style.top = `${finalTop}px`;
+        }
+        ghost.style.transform = `translate(${snapToGrid(finalLeft, snapUnit)}px, ${snapToGrid(finalTop, snapUnit)}px)`;
+      }
+      function onMouseUp() {
+        chrome.classList.remove("is-dragging");
+        ghost.remove();
+        document.removeEventListener("mousemove", onMouseMove);
+        document.removeEventListener("mouseup", onMouseUp);
+        const snappedLeft = snapToGrid(finalLeft, snapUnit);
+        const snappedTop = snapToGrid(finalTop, snapUnit);
+        updatePanelGeometry(id, { x: snappedLeft, y: snappedTop });
+      }
+      document.addEventListener("mousemove", onMouseMove);
+      document.addEventListener("mouseup", onMouseUp);
+    });
+    if (!isCollapsed) {
+      const directions = ["n", "s", "e", "w", "nw", "ne", "sw", "se"];
+      directions.forEach((dir) => {
+        const handle = document.createElement("div");
+        handle.className = `resize-handle ${dir}`;
+        container.appendChild(handle);
+        handle.addEventListener("mousedown", (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          bringToFront(id);
+          chrome.classList.add("is-resizing");
+          const startX = e.clientX;
+          const startY = e.clientY;
+          const startLeft = parseInt(container.style.left);
+          const startTop = parseInt(container.style.top);
+          const startW = parseInt(container.style.width);
+          const startH = parseInt(container.style.height);
+          const snapUnit = getState().snapEnabled ? 16 : 1;
+          const ghost = document.createElement("div");
+          ghost.className = "panel-snap-ghost";
+          ghost.style.transform = `translate(${snapToGrid(startLeft, snapUnit)}px, ${snapToGrid(startTop, snapUnit)}px)`;
+          ghost.style.width = `${snapToGrid(startW, snapUnit)}px`;
+          ghost.style.height = `${snapToGrid(startH, snapUnit)}px`;
+          ghost.style.zIndex = zIndex - 1;
+          container.parentElement.appendChild(ghost);
+          let finalLeft = startLeft;
+          let finalTop = startTop;
+          let finalW = startW;
+          let finalH = startH;
+          function onMouseMove(moveEvent) {
+            const dx = moveEvent.clientX - startX;
+            const dy = moveEvent.clientY - startY;
+            const windowW = window.innerWidth;
+            const windowH = window.innerHeight;
+            if (dir.includes("e")) {
+              const maxW = windowW - startLeft - 8;
+              finalW = Math.max(288, Math.min(startW + dx, maxW));
+            }
+            if (dir.includes("w")) {
+              let potentialLeft = startLeft + dx;
+              if (potentialLeft < 8) potentialLeft = 8;
+              const potentialW = startW + (startLeft - potentialLeft);
+              if (potentialW >= 288) {
+                finalW = potentialW;
+                finalLeft = potentialLeft;
+              }
+            }
+            if (dir.includes("s")) {
+              const maxH = windowH - startTop - 8;
+              finalH = Math.max(224, Math.min(startH + dy, maxH));
+            }
+            if (dir.includes("n")) {
+              let potentialTop = startTop + dy;
+              if (potentialTop < 8) potentialTop = 8;
+              const potentialH = startH + (startTop - potentialTop);
+              if (potentialH >= 224) {
+                finalH = potentialH;
+                finalTop = potentialTop;
+              }
+            }
+            if (getState().snapEnabled) {
+              const snapLeft = snapToGrid(finalLeft, snapUnit);
+              const snapTop = snapToGrid(finalTop, snapUnit);
+              const snapW = snapToGrid(finalW, snapUnit);
+              const snapH = snapToGrid(finalH, snapUnit);
+              container.style.left = `${snapLeft}px`;
+              container.style.top = `${snapTop}px`;
+              container.style.width = `${snapW}px`;
+              container.style.height = `${snapH}px`;
+              updateStudsForWidth(studsRow, snapW);
+            } else {
+              container.style.left = `${finalLeft}px`;
+              container.style.top = `${finalTop}px`;
+              container.style.width = `${finalW}px`;
+              container.style.height = `${finalH}px`;
+              updateStudsForWidth(studsRow, finalW);
+            }
+            ghost.style.transform = `translate(${snapToGrid(finalLeft, snapUnit)}px, ${snapToGrid(finalTop, snapUnit)}px)`;
+            ghost.style.width = `${snapToGrid(finalW, snapUnit)}px`;
+            ghost.style.height = `${snapToGrid(finalH, snapUnit)}px`;
+          }
+          function onMouseUp() {
+            chrome.classList.remove("is-resizing");
+            ghost.remove();
+            document.removeEventListener("mousemove", onMouseMove);
+            document.removeEventListener("mouseup", onMouseUp);
+            updatePanelGeometry(id, {
+              x: snapToGrid(finalLeft, snapUnit),
+              y: snapToGrid(finalTop, snapUnit),
+              width: snapToGrid(finalW, snapUnit),
+              height: snapToGrid(finalH, snapUnit)
+            });
+          }
+          document.addEventListener("mousemove", onMouseMove);
+          document.addEventListener("mouseup", onMouseUp);
+        });
+      });
+    }
+    container.addEventListener("mousedown", () => {
+      bringToFront(id);
+    });
+    return container;
+  }
+  function updateStudsForWidth(studsRow, width) {
+    const numStuds = Math.max(4, Math.floor((width - 32) / 60));
+    studsRow.innerHTML = "";
+    for (let i = 0; i < numStuds; i++) {
+      const stud = document.createElement("div");
+      stud.className = "panel-stud";
+      studsRow.appendChild(stud);
+    }
+  }
+
+  // js/hooks/sound.js
+  function playSound(type) {
+    const state2 = getState();
+    if (!state2.soundEnabled) return;
+    try {
+      const AudioContext = window.AudioContext || window.webkitAudioContext;
+      if (!AudioContext) return;
+      const ctx = new AudioContext();
+      if (type === "click") {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.type = "triangle";
+        osc.frequency.setValueAtTime(800, ctx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(100, ctx.currentTime + 0.05);
+        gain.gain.setValueAtTime(0.08, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(1e-3, ctx.currentTime + 0.05);
+        osc.start();
+        osc.stop(ctx.currentTime + 0.05);
+      } else if (type === "success") {
+        const notes = [523.25, 659.25, 783.99, 1046.5];
+        notes.forEach((freq, idx) => {
+          const time = ctx.currentTime + idx * 0.08;
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.type = "sine";
+          osc.frequency.setValueAtTime(freq, time);
+          gain.gain.setValueAtTime(0.04, time);
+          gain.gain.exponentialRampToValueAtTime(1e-3, time + 0.25);
+          osc.start(time);
+          osc.stop(time + 0.25);
+        });
+      } else if (type === "scan") {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.type = "sine";
+        osc.frequency.setValueAtTime(250, ctx.currentTime);
+        osc.frequency.linearRampToValueAtTime(600, ctx.currentTime + 0.25);
+        gain.gain.setValueAtTime(0.03, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(1e-3, ctx.currentTime + 0.25);
+        osc.start();
+        osc.stop(ctx.currentTime + 0.25);
+      }
+    } catch (err) {
+      console.error("Synthesized sound playing failed:", err);
+    }
+  }
+
+  // js/components/actionbar.js
+  var currentDockedEdge = "bottom";
+  var actionbarX = 0;
+  var actionbarY = 0;
+  var actionbarLength = 320;
+  var isFirstRender = true;
+  var isPlusMenuOpen = false;
+  function createActionBar(state2) {
+    const container = document.createElement("div");
+    container.className = "action-bar-wrapper";
+    const isHorizontal = currentDockedEdge === "top" || currentDockedEdge === "bottom";
+    const barWidth = isHorizontal ? actionbarLength : 72;
+    const barHeight = isHorizontal ? 72 : actionbarLength;
+    if (isFirstRender) {
+      const windowWidth = window.innerWidth;
+      const windowHeight = window.innerHeight;
+      actionbarX = (windowWidth - 320) / 2;
+      actionbarY = windowHeight - 72 - 16;
+      isFirstRender = false;
+    }
+    container.style.left = `${actionbarX}px`;
+    container.style.top = `${actionbarY}px`;
+    container.style.width = `${barWidth}px`;
+    container.style.height = `${barHeight}px`;
+    const bar = document.createElement("div");
+    bar.className = `action-bar-container docked-${currentDockedEdge} ${isHorizontal ? "layout-row" : "layout-col"}`;
+    const dragHandle = document.createElement("div");
+    dragHandle.className = "action-bar-drag";
+    dragHandle.title = "Drag to Dock at Edges";
+    dragHandle.innerHTML = '<div class="drag-studs"></div>';
+    bar.appendChild(dragHandle);
+    const buttonsGroup = document.createElement("div");
+    buttonsGroup.className = "action-bar-buttons";
+    const navItems = [
+      {
+        id: "scanner",
+        icon: `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="9" cy="9" r="2"></circle><path d="M14 13l-3-3-5 5"></path><path d="M5 21l6-6 4 4 6-6"></path><line x1="2" y1="12" x2="22" y2="12" stroke="currentColor" stroke-width="2.5" stroke-dasharray="3 3"></line></svg>`,
+        label: "Scan"
+      },
+      {
+        id: "inventory",
+        icon: `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="8" width="18" height="13" rx="2" ry="2"></rect><rect x="6" y="3" width="4" height="2" rx="0.5" fill="currentColor"/><rect x="14" y="3" width="4" height="2" rx="0.5" fill="currentColor"/></svg>`,
+        label: "Inventory"
+      },
+      {
+        id: "buildIdeas",
+        icon: `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"></path><path d="M2 17l10 5 10-5"></path><path d="M2 12l10 5 10-5"></path></svg>`,
+        label: "Ideas"
+      }
+    ];
+    function renderButtonsContent() {
+      buttonsGroup.innerHTML = "";
+      if (actionbarLength < 220) {
+        const plusBtn = document.createElement("button");
+        plusBtn.type = "button";
+        plusBtn.className = `action-btn plus-toggle ${isPlusMenuOpen ? "active" : ""}`;
+        plusBtn.title = "Toggle Navigation Menu";
+        plusBtn.innerHTML = `
+        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+        <span class="tooltip font-display">Navigation</span>
+      `;
+        plusBtn.onclick = (e) => {
+          e.stopPropagation();
+          playSound("click");
+          isPlusMenuOpen = !isPlusMenuOpen;
+          notify();
+        };
+        buttonsGroup.appendChild(plusBtn);
+        if (isPlusMenuOpen) {
+          const popover = document.createElement("div");
+          popover.className = "action-bar-collapsed-popover";
+          navItems.forEach((item) => {
+            const isActive = state2.panels[item.id].isOpen;
+            const btn = document.createElement("button");
+            btn.type = "button";
+            btn.className = `action-btn ${isActive ? "active" : ""}`;
+            btn.title = `${isActive ? "Close" : "Open"} ${item.label}`;
+            btn.innerHTML = `${item.icon} <span class="tooltip font-display">${item.label}</span>`;
+            btn.onclick = () => {
+              playSound("click");
+              togglePanel(item.id);
+              isPlusMenuOpen = false;
+              notify();
+            };
+            popover.appendChild(btn);
+          });
+          container.appendChild(popover);
+        }
+      } else {
+        navItems.forEach((item) => {
+          const isActive = state2.panels[item.id].isOpen;
+          const btn = document.createElement("button");
+          btn.type = "button";
+          btn.className = `action-btn ${isActive ? "active" : ""}`;
+          btn.title = `${isActive ? "Close" : "Open"} ${item.label}`;
+          btn.innerHTML = `${item.icon} <span class="tooltip font-display">${item.label}</span>`;
+          btn.onclick = () => {
+            playSound("click");
+            togglePanel(item.id);
+          };
+          buttonsGroup.appendChild(btn);
+        });
+      }
+    }
+    renderButtonsContent();
+    bar.appendChild(buttonsGroup);
+    const resizeHandle = document.createElement("div");
+    resizeHandle.className = "action-bar-resize-handle";
+    resizeHandle.title = "Drag to Resize Lengthwise";
+    bar.appendChild(resizeHandle);
+    container.appendChild(bar);
+    document.addEventListener("mousedown", (e) => {
+      if (isPlusMenuOpen && !container.contains(e.target)) {
+        isPlusMenuOpen = false;
+        notify();
+      }
+    });
+    resizeHandle.addEventListener("mousedown", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const startX = e.clientX;
+      const startY = e.clientY;
+      const startLength = actionbarLength;
+      function onMouseMoveResize(moveEvent) {
+        let delta = 0;
+        if (isHorizontal) {
+          delta = moveEvent.clientX - startX;
+        } else {
+          delta = moveEvent.clientY - startY;
+        }
+        actionbarLength = Math.max(120, Math.min(600, startLength + delta));
+        if (isHorizontal) {
+          container.style.width = `${actionbarLength}px`;
+        } else {
+          container.style.height = `${actionbarLength}px`;
+        }
+        renderButtonsContent();
+      }
+      function onMouseUpResize() {
+        document.removeEventListener("mousemove", onMouseMoveResize);
+        document.removeEventListener("mouseup", onMouseUpResize);
+        playSound("click");
+        notify();
+      }
+      document.addEventListener("mousemove", onMouseMoveResize);
+      document.addEventListener("mouseup", onMouseUpResize);
+    });
+    dragHandle.addEventListener("mousedown", (e) => {
+      e.preventDefault();
+      const startX = e.clientX;
+      const startY = e.clientY;
+      const startLeft = parseInt(container.style.left);
+      const startTop = parseInt(container.style.top);
+      function onMouseMove(moveEvent) {
+        const dx = moveEvent.clientX - startX;
+        const dy = moveEvent.clientY - startY;
+        actionbarX = startLeft + dx;
+        actionbarY = startTop + dy;
+        container.style.left = `${actionbarX}px`;
+        container.style.top = `${actionbarY}px`;
+      }
+      function onMouseUp() {
+        document.removeEventListener("mousemove", onMouseMove);
+        document.removeEventListener("mouseup", onMouseUp);
+        const windowWidth = window.innerWidth;
+        const windowHeight = window.innerHeight;
+        const tempDock = getDockPosition(actionbarX, actionbarY, barWidth, barHeight, windowWidth, windowHeight);
+        const nextIsHorizontal = tempDock.edge === "top" || tempDock.edge === "bottom";
+        const nextBarWidth = nextIsHorizontal ? actionbarLength : 72;
+        const nextBarHeight = nextIsHorizontal ? 72 : actionbarLength;
+        const dock = getDockPosition(actionbarX, actionbarY, nextBarWidth, nextBarHeight, windowWidth, windowHeight);
+        let targetX = dock.x;
+        let targetY = dock.y;
+        const margin = 12;
+        if (dock.edge === "bottom") {
+          targetY = windowHeight - nextBarHeight - margin;
+        } else if (dock.edge === "top") {
+          targetY = margin;
+        } else if (dock.edge === "left") {
+          targetX = margin;
+        } else if (dock.edge === "right") {
+          targetX = windowWidth - nextBarWidth - margin;
+        }
+        currentDockedEdge = dock.edge;
+        actionbarX = targetX;
+        actionbarY = targetY;
+        playSound("click");
+        notify();
+      }
+      document.addEventListener("mousemove", onMouseMove);
+      document.addEventListener("mouseup", onMouseUp);
+    });
+    return container;
+  }
+
+  // js/api/fixtures.js
+  function getBrickSvg(color, type = "brick-2x4") {
+    let innerElements = "";
+    let view = "0 0 120 80";
+    const border = "#22222A";
+    if (type === "brick-2x4" || type === "plate-2x4") {
+      view = "0 0 160 90";
+      const isPlate = type.includes("plate");
+      innerElements = `
+      <rect x="5" y="5" width="150" height="80" rx="10" fill="${color}" stroke="${border}" stroke-width="4"/>
+      <!-- Studs -->
+      <circle cx="25" cy="25" r="12" fill="${color}" stroke="${border}" stroke-width="3" filter="brightness(1.1)"/>
+      <circle cx="25" cy="25" r="5" fill="none" stroke="${border}" stroke-width="2" opacity="0.3"/>
+      
+      <circle cx="65" cy="25" r="12" fill="${color}" stroke="${border}" stroke-width="3" filter="brightness(1.1)"/>
+      <circle cx="65" cy="25" r="5" fill="none" stroke="${border}" stroke-width="2" opacity="0.3"/>
+      
+      <circle cx="105" cy="25" r="12" fill="${color}" stroke="${border}" stroke-width="3" filter="brightness(1.1)"/>
+      <circle cx="105" cy="25" r="5" fill="none" stroke="${border}" stroke-width="2" opacity="0.3"/>
+      
+      <circle cx="145" cy="25" r="12" fill="${color}" stroke="${border}" stroke-width="3" filter="brightness(1.1)"/>
+      <circle cx="145" cy="25" r="5" fill="none" stroke="${border}" stroke-width="2" opacity="0.3"/>
+      
+      <circle cx="25" cy="65" r="12" fill="${color}" stroke="${border}" stroke-width="3" filter="brightness(1.1)"/>
+      <circle cx="25" cy="65" r="5" fill="none" stroke="${border}" stroke-width="2" opacity="0.3"/>
+      
+      <circle cx="65" cy="65" r="12" fill="${color}" stroke="${border}" stroke-width="3" filter="brightness(1.1)"/>
+      <circle cx="65" cy="65" r="5" fill="none" stroke="${border}" stroke-width="2" opacity="0.3"/>
+      
+      <circle cx="105" cy="65" r="12" fill="${color}" stroke="${border}" stroke-width="3" filter="brightness(1.1)"/>
+      <circle cx="105" cy="65" r="5" fill="none" stroke="${border}" stroke-width="2" opacity="0.3"/>
+      
+      <circle cx="145" cy="65" r="12" fill="${color}" stroke="${border}" stroke-width="3" filter="brightness(1.1)"/>
+      <circle cx="145" cy="65" r="5" fill="none" stroke="${border}" stroke-width="2" opacity="0.3"/>
+      
+      ${isPlate ? '<line x1="5" y1="45" x2="155" y2="45" stroke="' + border + '" stroke-dasharray="4 4" stroke-width="2"/>' : ""}
+    `;
+    } else if (type === "brick-2x2" || type === "plate-2x2") {
+      view = "0 0 90 90";
+      const isPlate = type.includes("plate");
+      innerElements = `
+      <rect x="5" y="5" width="80" height="80" rx="10" fill="${color}" stroke="${border}" stroke-width="4"/>
+      <!-- Studs -->
+      <circle cx="25" cy="25" r="12" fill="${color}" stroke="${border}" stroke-width="3" filter="brightness(1.1)"/>
+      <circle cx="25" cy="25" r="5" fill="none" stroke="${border}" stroke-width="2" opacity="0.3"/>
+      
+      <circle cx="65" cy="25" r="12" fill="${color}" stroke="${border}" stroke-width="3" filter="brightness(1.1)"/>
+      <circle cx="65" cy="25" r="5" fill="none" stroke="${border}" stroke-width="2" opacity="0.3"/>
+      
+      <circle cx="25" cy="65" r="12" fill="${color}" stroke="${border}" stroke-width="3" filter="brightness(1.1)"/>
+      <circle cx="25" cy="65" r="5" fill="none" stroke="${border}" stroke-width="2" opacity="0.3"/>
+      
+      <circle cx="65" cy="65" r="12" fill="${color}" stroke="${border}" stroke-width="3" filter="brightness(1.1)"/>
+      <circle cx="65" cy="65" r="5" fill="none" stroke="${border}" stroke-width="2" opacity="0.3"/>
+      
+      ${isPlate ? '<line x1="5" y1="45" x2="85" y2="45" stroke="' + border + '" stroke-dasharray="4 4" stroke-width="2"/>' : ""}
+    `;
+    } else if (type === "plate-1x2" || type === "brick-1x2") {
+      view = "0 0 90 50";
+      innerElements = `
+      <rect x="5" y="5" width="80" height="40" rx="8" fill="${color}" stroke="${border}" stroke-width="4"/>
+      <!-- Studs -->
+      <circle cx="25" cy="25" r="10" fill="${color}" stroke="${border}" stroke-width="3" filter="brightness(1.1)"/>
+      <circle cx="65" cy="25" r="10" fill="${color}" stroke="${border}" stroke-width="3" filter="brightness(1.1)"/>
+    `;
+    } else if (type === "slope-2x2") {
+      view = "0 0 90 90";
+      innerElements = `
+      <rect x="5" y="5" width="80" height="80" rx="10" fill="${color}" stroke="${border}" stroke-width="4"/>
+      <!-- Slope Angle -->
+      <path d="M 5,45 L 85,85" stroke="${border}" stroke-width="3"/>
+      <circle cx="25" cy="25" r="10" fill="${color}" stroke="${border}" stroke-width="3" filter="brightness(1.1)"/>
+      <circle cx="65" cy="25" r="10" fill="${color}" stroke="${border}" stroke-width="3" filter="brightness(1.1)"/>
+    `;
+    } else if (type === "technic-1x1") {
+      view = "0 0 50 50";
+      innerElements = `
+      <rect x="5" y="5" width="40" height="40" rx="8" fill="${color}" stroke="${border}" stroke-width="4"/>
+      <circle cx="25" cy="25" r="10" fill="${color}" stroke="${border}" stroke-width="3" filter="brightness(1.1)"/>
+      <circle cx="25" cy="25" r="4" fill="#22222A"/>
+    `;
+    } else if (type === "minifig-torso") {
+      view = "0 0 80 80";
+      innerElements = `
+      <rect x="34" y="5" width="12" height="10" rx="2" fill="#FFD500" stroke="${border}" stroke-width="3"/>
+      <path d="M 20,15 L 60,15 L 68,70 L 12,70 Z" fill="${color}" stroke="${border}" stroke-width="4"/>
+      <path d="M 12,18 C 5,25 2,35 5,45" stroke="${color}" stroke-width="10" stroke-linecap="round" fill="none"/>
+      <path d="M 68,18 C 75,25 78,35 75,45" stroke="${color}" stroke-width="10" stroke-linecap="round" fill="none"/>
+    `;
+    } else {
+      view = "0 0 60 60";
+      innerElements = `<rect x="5" y="5" width="50" height="50" rx="8" fill="${color}" stroke="${border}" stroke-width="4"/>`;
+    }
+    const svgString = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${view}">${innerElements}</svg>`;
+    return `data:image/svg+xml;utf8,${encodeURIComponent(svgString)}`;
+  }
+  var MOCK_PARTS = [
+    { part_id: 1, part_name: "2x4 Brick (Red)", category: "Brick", color: "#D01012", type: "brick-2x4", reference_image_url: getBrickSvg("#D01012", "brick-2x4") },
+    { part_id: 2, part_name: "2x4 Brick (Blue)", category: "Brick", color: "#0057A6", type: "brick-2x4", reference_image_url: getBrickSvg("#0057A6", "brick-2x4") },
+    { part_id: 3, part_name: "2x2 Brick (Yellow)", category: "Brick", color: "#FFD500", type: "brick-2x2", reference_image_url: getBrickSvg("#FFD500", "brick-2x2") },
+    { part_id: 4, part_name: "2x2 Slope 45\xB0 (Yellow)", category: "Slope", color: "#FFD500", type: "slope-2x2", reference_image_url: getBrickSvg("#FFD500", "slope-2x2") },
+    { part_id: 5, part_name: "2x2 Plate (Red)", category: "Plate", color: "#D01012", type: "plate-2x2", reference_image_url: getBrickSvg("#D01012", "plate-2x2") },
+    { part_id: 6, part_name: "1x2 Plate (Yellow)", category: "Plate", color: "#FFD500", type: "plate-1x2", reference_image_url: getBrickSvg("#FFD500", "plate-1x2") },
+    { part_id: 7, part_name: "2x4 Plate (Blue)", category: "Plate", color: "#0057A6", type: "plate-2x4", reference_image_url: getBrickSvg("#0057A6", "plate-2x4") },
+    { part_id: 8, part_name: "1x2 Plate (Red)", category: "Plate", color: "#D01012", type: "plate-1x2", reference_image_url: getBrickSvg("#D01012", "plate-1x2") },
+    { part_id: 9, part_name: "2x2 Slope 45\xB0 (Blue)", category: "Slope", color: "#0057A6", type: "slope-2x2", reference_image_url: getBrickSvg("#0057A6", "slope-2x2") },
+    { part_id: 10, part_name: "1x4 Plate (White)", category: "Plate", color: "#FFFFFF", type: "plate-2x4", reference_image_url: getBrickSvg("#FFFFFF", "plate-2x4") },
+    { part_id: 11, part_name: "Technic 1x1 Brick (Grey)", category: "Technic", color: "#5B5B66", type: "technic-1x1", reference_image_url: getBrickSvg("#5B5B66", "technic-1x1") },
+    { part_id: 12, part_name: "Minifig Torso (Blue)", category: "Minifig", color: "#0057A6", type: "minifig-torso", reference_image_url: getBrickSvg("#0057A6", "minifig-torso") },
+    { part_id: 13, part_name: "2x4 Plate (Green)", category: "Plate", color: "#1E7A34", type: "plate-2x4", reference_image_url: getBrickSvg("#1E7A34", "plate-2x4") },
+    { part_id: 14, part_name: "2x4 Brick (Grey)", category: "Brick", color: "#5B5B66", type: "brick-2x4", reference_image_url: getBrickSvg("#5B5B66", "brick-2x4") }
+  ];
+  var mockInventory = [
+    { inventory_id: 101, part_id: 1, part_name: "2x4 Brick (Red)", reference_image_url: getBrickSvg("#D01012", "brick-2x4"), category: "Brick", quantity: 6, date_added: "2026-07-01T12:00:00Z", source_image_key: null },
+    { inventory_id: 102, part_id: 3, part_name: "2x2 Brick (Yellow)", reference_image_url: getBrickSvg("#FFD500", "brick-2x2"), category: "Brick", quantity: 3, date_added: "2026-07-02T14:30:00Z", source_image_key: null },
+    { inventory_id: 103, part_id: 4, part_name: "2x2 Slope 45\xB0 (Yellow)", reference_image_url: getBrickSvg("#FFD500", "slope-2x2"), category: "Slope", quantity: 2, date_added: "2026-07-03T10:15:00Z", source_image_key: null },
+    { inventory_id: 104, part_id: 5, part_name: "2x2 Plate (Red)", reference_image_url: getBrickSvg("#D01012", "plate-2x2"), category: "Plate", quantity: 2, date_added: "2026-07-04T09:00:00Z", source_image_key: null },
+    { inventory_id: 105, part_id: 6, part_name: "1x2 Plate (Yellow)", reference_image_url: getBrickSvg("#FFD500", "plate-1x2"), category: "Plate", quantity: 5, date_added: "2026-07-05T16:45:00Z", source_image_key: null },
+    { inventory_id: 106, part_id: 7, part_name: "2x4 Plate (Blue)", reference_image_url: getBrickSvg("#0057A6", "plate-2x4"), category: "Plate", quantity: 1, date_added: "2026-07-06T11:20:00Z", source_image_key: null },
+    { inventory_id: 107, part_id: 8, part_name: "1x2 Plate (Red)", reference_image_url: getBrickSvg("#D01012", "plate-1x2"), category: "Plate", quantity: 4, date_added: "2026-07-07T15:10:00Z", source_image_key: null }
+  ];
+  var MOCK_BUILDS = [
+    {
+      build_id: 1,
+      build_name: "Classic Yellow Duck",
+      description: "The timeless LEGO mascot model. Extremely easy to build and requires just five yellow and red parts.",
+      difficulty: "Easy",
+      hero_image_url: "assets/builds/duck.png",
+      parts: [
+        { part_id: 3, part_name: "2x2 Brick (Yellow)", quantity_required: 1 },
+        { part_id: 4, part_name: "2x2 Slope 45\xB0 (Yellow)", quantity_required: 1 },
+        { part_id: 5, part_name: "2x2 Plate (Red)", quantity_required: 1 },
+        { part_id: 6, part_name: "1x2 Plate (Yellow)", quantity_required: 2 }
+      ],
+      steps: [
+        "Base Connection: Attach the red 2x2 plate underneath the yellow 2x2 brick to form the duck's webbed feet.",
+        "Head and Beak: Mount the yellow 2x2 slope on top of the yellow brick facing forward to establish the head profile.",
+        "Wings Assembly: Align the two yellow 1x2 plates on each side of the main brick structure to complete the wings."
+      ]
+    },
+    {
+      build_id: 2,
+      build_name: "Micro Shuttle Fighter",
+      description: "Launch into deep orbit with this compact galactic explorer. Complete with folding wings and rear engine block.",
+      difficulty: "Medium",
+      hero_image_url: "assets/builds/shuttle.png",
+      parts: [
+        { part_id: 7, part_name: "2x4 Plate (Blue)", quantity_required: 2 },
+        { part_id: 8, part_name: "1x2 Plate (Red)", quantity_required: 2 },
+        { part_id: 9, part_name: "2x2 Slope 45\xB0 (Blue)", quantity_required: 2 },
+        { part_id: 10, part_name: "1x4 Plate (White)", quantity_required: 1 },
+        { part_id: 11, part_name: "Technic 1x1 Brick (Grey)", quantity_required: 1 }
+      ],
+      steps: [
+        "Wings Foundation: Connect the two blue 2x4 plates side-by-side using the white 1x4 plate across the bottom.",
+        "Thruster Engine: Install the grey Technic 1x1 brick at the rear center of the baseplate layout.",
+        "Cockpit Slopes: Attach the two blue 2x2 slopes facing forward on the front section of the wing structure.",
+        "Exhaust Trails: Mount the two red 1x2 plates to the rear of the engine block to represent roaring rocket thrusters."
+      ]
+    },
+    {
+      build_id: 3,
+      build_name: "Tiny Castle Guard Gate",
+      description: "A defensive fortress segment with two arch towers, perfect for protecting your LEGO kingdoms.",
+      difficulty: "Hard",
+      hero_image_url: "assets/builds/castle.png",
+      parts: [
+        { part_id: 14, part_name: "2x4 Brick (Grey)", quantity_required: 4 },
+        { part_id: 11, part_name: "Technic 1x1 Brick (Grey)", quantity_required: 2 },
+        { part_id: 8, part_name: "1x2 Plate (Red)", quantity_required: 4 },
+        { part_id: 13, part_name: "2x4 Plate (Green)", quantity_required: 2 }
+      ],
+      steps: [
+        "Ground Level: Align the two green 2x4 plates flat side-by-side on your workspace to build the gate lawn.",
+        "Pillar Columns: Stack the grey 2x4 bricks on both sides to erect the sturdy castle guard pillars.",
+        "Arch Gate: Connect the towers at the top by securing the grey Technic 1x1 bricks across the center opening.",
+        "Battle Banners: Crown the top of the columns with red 1x2 plates to display the royal kingdom guard flags."
+      ]
+    },
+    {
+      build_id: 4,
+      build_name: "Desktop Phone Cradle",
+      description: "An angled brick stand that keeps your smartphone steady on your desk. Customizable and very sturdy.",
+      difficulty: "Easy",
+      hero_image_url: "assets/builds/cradle.png",
+      parts: [
+        { part_id: 1, part_name: "2x4 Brick (Red)", quantity_required: 4 },
+        { part_id: 2, part_name: "2x4 Brick (Blue)", quantity_required: 2 },
+        { part_id: 3, part_name: "2x2 Brick (Yellow)", quantity_required: 2 },
+        { part_id: 7, part_name: "2x4 Plate (Blue)", quantity_required: 2 }
+      ],
+      steps: [
+        "Stand Footing: Place the two blue 2x4 plates flat as the solid resting base plate for the stand.",
+        "Support Wall: Stack the red and blue 2x4 bricks horizontally to assemble the supportive back wall panel.",
+        "Front Cradle Lip: Place the yellow 2x2 bricks at the front lip to prevent your smartphone from sliding."
+      ]
+    },
+    {
+      build_id: 5,
+      build_name: "Mini Rainbow Flower",
+      description: "A colorful miniature LEGO flower sitting on a green grass leaf plate. Brings joy to any desk workspace.",
+      difficulty: "Easy",
+      hero_image_url: "assets/builds/flower.png",
+      parts: [
+        { part_id: 6, part_name: "1x2 Plate (Yellow)", quantity_required: 2 },
+        { part_id: 5, part_name: "2x2 Plate (Red)", quantity_required: 1 },
+        { part_id: 7, part_name: "2x4 Plate (Blue)", quantity_required: 1 },
+        { part_id: 13, part_name: "2x4 Plate (Green)", quantity_required: 1 }
+      ],
+      steps: [
+        "Stem & Leaf: Place the green 2x4 plate flat as the leaf foundation representing the flower's stem and green leaf.",
+        "Soil Bed: Attach the blue 2x4 plate on the leaf center to create the fertile soil bed base.",
+        "Flower Bud: Mount the red 2x2 plate in the center to support the petals.",
+        "Petals Bloom: Stack the two yellow 1x2 plates on the sides of the bud to finish the blooming rainbow petals."
+      ]
+    }
+  ];
+  function addMockInventoryItem(item) {
+    const newId = Math.max(...mockInventory.map((i) => i.inventory_id), 0) + 1;
+    const part = MOCK_PARTS.find((p) => p.part_id === item.part_id);
+    const newItem = {
+      inventory_id: newId,
+      part_id: item.part_id,
+      part_name: part ? part.part_name : "Unknown Part",
+      reference_image_url: part ? part.reference_image_url : getBrickSvg("#5B5B66"),
+      category: part ? part.category : "Misc",
+      quantity: item.quantity,
+      date_added: (/* @__PURE__ */ new Date()).toISOString(),
+      source_image_key: item.source_image_key || null
+    };
+    const existingIndex = mockInventory.findIndex((i) => i.part_id === item.part_id);
+    if (existingIndex !== -1) {
+      mockInventory[existingIndex].quantity += item.quantity;
+      return mockInventory[existingIndex];
+    }
+    mockInventory.push(newItem);
+    return newItem;
+  }
+  function updateMockInventoryItem(inventory_id, { quantity }) {
+    const index = mockInventory.findIndex((i) => i.inventory_id === inventory_id);
+    if (index !== -1) {
+      mockInventory[index].quantity = quantity;
+      return mockInventory[index];
+    }
+    return null;
+  }
+  function deleteMockInventoryItem(inventory_id) {
+    const index = mockInventory.findIndex((i) => i.inventory_id === inventory_id);
+    if (index !== -1) {
+      mockInventory.splice(index, 1);
+      return true;
+    }
+    return false;
+  }
+
+  // js/api/scanner.js
+  var sleep2 = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+  async function getUploadUrl(fileName) {
+    if (!IS_MOCKED) {
+      const res = await fetch(`${API_BASE_URL}/scanner/upload-url`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...authHeader()
+        },
+        body: JSON.stringify({ fileName })
+      });
+      if (!res.ok) throw new Error("Failed to get upload URL");
+      return await res.json();
+    }
+    await sleep2(400);
+    const key = "uploads/" + Math.random().toString(36).substr(2, 9) + "_" + fileName;
+    const uploadUrl = `https://mock-s3-bucket.amazonaws.com/${key}?signature=fake_s3_presigned_signature`;
+    return { uploadUrl, key };
+  }
+  async function uploadImage(uploadUrl, file) {
+    if (!IS_MOCKED) {
+      const res = await fetch(uploadUrl, {
+        method: "PUT",
+        body: file
+      });
+      if (!res.ok) throw new Error("Failed to upload image to S3");
+      return { success: true };
+    }
+    await sleep2(1e3);
+    return { success: true };
+  }
+  async function scanBrick(key) {
+    if (!IS_MOCKED) {
+      const res = await fetch(`${API_BASE_URL}/scanner/scan`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...authHeader()
+        },
+        body: JSON.stringify({ key })
+      });
+      if (!res.ok) throw new Error("Failed to scan brick");
+      return await res.json();
+    }
+    await sleep2(1200);
+    let selectedPart = MOCK_PARTS[0];
+    const lowerKey = key.toLowerCase();
+    if (lowerKey.includes("blue")) {
+      const bluePlate = MOCK_PARTS.find((p) => p.part_id === 7);
+      selectedPart = bluePlate || MOCK_PARTS[1];
+    } else if (lowerKey.includes("red")) {
+      const redBrick = MOCK_PARTS.find((p) => p.part_id === 1);
+      selectedPart = redBrick || MOCK_PARTS[0];
+    } else if (lowerKey.includes("yellow")) {
+      const yellowParts = MOCK_PARTS.filter((p) => p.part_name.toLowerCase().includes("yellow"));
+      if (yellowParts.length > 0) selectedPart = yellowParts[Math.floor(Math.random() * yellowParts.length)];
+    } else if (lowerKey.includes("grey") || lowerKey.includes("gray")) {
+      const greyParts = MOCK_PARTS.filter((p) => p.part_name.toLowerCase().includes("grey"));
+      if (greyParts.length > 0) selectedPart = greyParts[Math.floor(Math.random() * greyParts.length)];
+    } else {
+      selectedPart = MOCK_PARTS[Math.floor(Math.random() * MOCK_PARTS.length)];
+    }
+    const confidence = parseFloat((82 + Math.random() * 17.5).toFixed(1));
+    return {
+      label: selectedPart.type + "_" + selectedPart.part_id,
+      confidence,
+      part: {
+        part_id: selectedPart.part_id,
+        part_name: selectedPart.part_name,
+        category: selectedPart.category,
+        reference_image_url: selectedPart.reference_image_url
+      }
+    };
+  }
+  async function scanBatch(key) {
+    if (!IS_MOCKED) {
+      const res = await fetch(`${API_BASE_URL}/scanner/scan-batch`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...authHeader()
+        },
+        body: JSON.stringify({ key })
+      });
+      if (!res.ok) throw new Error("Failed to scan batch");
+      return await res.json();
+    }
+    await sleep2(1500);
+    const lowerKey = key.toLowerCase();
+    if (lowerKey.includes("batch")) {
+      const list = [
+        MOCK_PARTS.find((p) => p.part_id === 1) || MOCK_PARTS[0],
+        MOCK_PARTS.find((p) => p.part_id === 3) || MOCK_PARTS[2],
+        MOCK_PARTS.find((p) => p.part_id === 7) || MOCK_PARTS[6]
+      ];
+      return {
+        candidates: list.map((part, idx) => ({
+          boxIndex: idx,
+          label: part.type + "_" + part.part_id,
+          confidence: parseFloat((88 + Math.random() * 10).toFixed(1)),
+          part: {
+            part_id: part.part_id,
+            part_name: part.part_name,
+            category: part.category,
+            reference_image_url: part.reference_image_url
+          }
+        }))
+      };
+    }
+    const count = Math.random() > 0.5 ? 3 : 2;
+    const candidates2 = [];
+    const chosenIndices = /* @__PURE__ */ new Set();
+    while (chosenIndices.size < count) {
+      const idx = Math.floor(Math.random() * MOCK_PARTS.length);
+      chosenIndices.add(idx);
+    }
+    Array.from(chosenIndices).forEach((partIndex, idx) => {
+      const part = MOCK_PARTS[partIndex];
+      candidates2.push({
+        boxIndex: idx,
+        label: part.type + "_" + part.part_id,
+        confidence: parseFloat((78 + Math.random() * 21).toFixed(1)),
+        part: {
+          part_id: part.part_id,
+          part_name: part.part_name,
+          category: part.category,
+          reference_image_url: part.reference_image_url
+        }
+      });
+    });
+    return { candidates: candidates2 };
+  }
+
+  // js/api/inventory.js
+  var sleep3 = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+  async function getInventory() {
+    if (!IS_MOCKED) {
+      const res = await fetch(`${API_BASE_URL}/inventory`, {
+        headers: { ...authHeader() }
+      });
+      if (!res.ok) throw new Error("Failed to fetch inventory");
+      return await res.json();
+    }
+    await sleep3(600);
+    return [...mockInventory];
+  }
+  async function addInventoryItem({ part_id, quantity, source_image_key }) {
+    if (!IS_MOCKED) {
+      const res = await fetch(`${API_BASE_URL}/inventory`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...authHeader()
+        },
+        body: JSON.stringify({ part_id, quantity, source_image_key })
+      });
+      if (!res.ok) throw new Error("Failed to add inventory item");
+      return await res.json();
+    }
+    await sleep3(500);
+    if (!part_id || quantity === void 0) {
+      throw new Error("part_id and quantity are required");
+    }
+    const result = addMockInventoryItem({ part_id, quantity, source_image_key });
+    return { ...result };
+  }
+  async function updateInventoryItem(inventory_id, { quantity }) {
+    if (!IS_MOCKED) {
+      const res = await fetch(`${API_BASE_URL}/inventory/${inventory_id}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          ...authHeader()
+        },
+        body: JSON.stringify({ quantity })
+      });
+      if (!res.ok) throw new Error("Failed to update inventory item");
+      return await res.json();
+    }
+    await sleep3(400);
+    if (quantity === void 0 || quantity < 0) {
+      throw new Error("quantity is required and must be non-negative");
+    }
+    if (quantity === 0) {
+      const success = deleteMockInventoryItem(inventory_id);
+      return { success, deleted: true };
+    }
+    const result = updateMockInventoryItem(inventory_id, { quantity });
+    if (!result) {
+      throw new Error(`Inventory item ${inventory_id} not found`);
+    }
+    return { ...result };
+  }
+  async function deleteInventoryItem(inventory_id) {
+    if (!IS_MOCKED) {
+      const res = await fetch(`${API_BASE_URL}/inventory/${inventory_id}`, {
+        method: "DELETE",
+        headers: { ...authHeader() }
+      });
+      if (!res.ok) throw new Error("Failed to delete inventory item");
+      return await res.json();
+    }
+    await sleep3(400);
+    const success = deleteMockInventoryItem(inventory_id);
+    if (!success) {
+      throw new Error(`Inventory item ${inventory_id} not found`);
+    }
+    return { success: true };
+  }
+
+  // js/components/scanner.js
+  var scanState = "idle";
+  var candidates = [];
+  var addedIndices = /* @__PURE__ */ new Set();
+  var errorMsg = "";
+  var currentUploadedImageSrc = "";
+  var minifigIntervalId = null;
+  var minifigImages = [
+    "FredFright.png",
+    "FredSearching.png",
+    "GlassMagnifyingDetective.png",
+    "MagnifyingGlassKid.png",
+    "TakingAPic.png"
+  ];
+  function startMinifigurePopups() {
+    stopMinifigurePopups();
+    minifigIntervalId = setInterval(() => {
+      const container = document.querySelector(".scanner-image-preview-wrapper");
+      if (!container) return;
+      const minifig = document.createElement("div");
+      minifig.className = "scanning-minifig";
+      const randomImg = minifigImages[Math.floor(Math.random() * minifigImages.length)];
+      minifig.style.backgroundImage = `url('assets/magnifier-minifigures/${randomImg}')`;
+      minifig.style.width = "64px";
+      minifig.style.height = "64px";
+      const x = Math.random() * 75 + 10;
+      const y = Math.random() * 45 + 15;
+      minifig.style.left = `${x}%`;
+      minifig.style.top = `${y}%`;
+      container.appendChild(minifig);
+      playSound("scan");
+      setTimeout(() => {
+        minifig.remove();
+      }, 1600);
+    }, 850);
+  }
+  function stopMinifigurePopups() {
+    if (minifigIntervalId) {
+      clearInterval(minifigIntervalId);
+      minifigIntervalId = null;
+    }
+    document.querySelectorAll(".scanning-minifig").forEach((el) => el.remove());
+  }
+  function renderScanner(parentEl) {
+    parentEl.innerHTML = "";
+    addedIndices = /* @__PURE__ */ new Set();
+    if (scanState === "idle") {
+      renderIdleState(parentEl);
+    } else if (scanState === "uploading") {
+      renderSpinner(parentEl, "Uploading image to S3 bucket...");
+    } else if (scanState === "scanning") {
+      renderSpinner(parentEl, "AI Recognition identifying LEGO parts...");
+    } else if (scanState === "error") {
+      renderError(parentEl, errorMsg);
+    } else if (scanState === "results") {
+      renderResults(parentEl);
+    }
+  }
+  function renderIdleState(parent) {
+    const container = document.createElement("div");
+    container.className = "scanner-panel-container";
+    const dropzone = document.createElement("div");
+    dropzone.className = "scanner-dropzone";
+    dropzone.innerHTML = `
+    <div class="dropzone-circle">
+      <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+    </div>
+    <h4 class="font-display">Upload Brick Photo</h4>
+    <p>Drag files here or click to browse</p>
+    <input type="file" accept="image/*" style="display:none" id="scanner-file-input" />
+  `;
+    const fileInput = dropzone.querySelector("#scanner-file-input");
+    dropzone.onclick = () => fileInput.click();
+    fileInput.onchange = (e) => {
+      if (e.target.files && e.target.files[0]) {
+        const file = e.target.files[0];
+        const isBatch = file.name.toLowerCase().includes("batch") || file.name.toLowerCase().includes("multi");
+        runDetectionFlow(file, isBatch, parent);
+      }
+    };
+    container.appendChild(dropzone);
+    const demoSection = document.createElement("div");
+    demoSection.className = "demo-scans-section";
+    demoSection.innerHTML = `
+    <span class="demo-label font-display">Or Try Demo Photos:</span>
+    <div class="demo-buttons-grid">
+      <button type="button" class="demo-scan-btn font-display" data-type="red">\u{1F534} Red Brick</button>
+      <button type="button" class="demo-scan-btn font-display" data-type="blue">\u{1F535} Blue Plate</button>
+      <button type="button" class="demo-scan-btn font-display" data-type="batch">\u{1F4E6} Multi-Scan (Batch)</button>
+    </div>
+  `;
+    demoSection.querySelectorAll("[data-type]").forEach((btn) => {
+      btn.onclick = () => {
+        const type = btn.getAttribute("data-type");
+        let dummyFile = new File([""], "red_brick.jpg", { type: "image/jpeg" });
+        if (type === "blue") {
+          dummyFile = new File([""], "blue_plate.jpg", { type: "image/jpeg" });
+        } else if (type === "batch") {
+          dummyFile = new File([""], "batch_bricks.jpg", { type: "image/jpeg" });
+        }
+        runDetectionFlow(dummyFile, type === "batch", parent);
+      };
+    });
+    container.appendChild(demoSection);
+    parent.appendChild(container);
+  }
+  async function runDetectionFlow(file, isBatch, parent) {
+    try {
+      currentUploadedImageSrc = URL.createObjectURL(file);
+      scanState = "uploading";
+      renderScanner(parent);
+      const { uploadUrl, key } = await getUploadUrl(file.name);
+      await uploadImage(uploadUrl, file);
+      scanState = "scanning";
+      renderScanner(parent);
+      startMinifigurePopups();
+      if (isBatch) {
+        const result = await scanBatch(key);
+        candidates = result.candidates;
+      } else {
+        const result = await scanBrick(key);
+        candidates = [result];
+      }
+      await new Promise((resolve) => setTimeout(resolve, 3800));
+      stopMinifigurePopups();
+      playSound("success");
+      scanState = "results";
+      renderScanner(parent);
+    } catch (err) {
+      stopMinifigurePopups();
+      errorMsg = err.message || "Detection failed. Please check your network.";
+      scanState = "error";
+      renderScanner(parent);
+    }
+  }
+  function renderSpinner(parent, message) {
+    parent.innerHTML = `
+    <div class="brick-spinner-container">
+      <div class="scanner-image-preview-wrapper" style="position:relative;width:100%;height:160px;border:3px solid var(--ink-900);border-radius:var(--radius-card);background-color:var(--white);overflow:hidden;display:flex;align-items:center;justify-content:center;margin-bottom:16px;">
+        <img src="${currentUploadedImageSrc}" style="max-width:100%;max-height:100%;object-fit:contain;" />
+        <div class="scanner-scan-line"></div>
+      </div>
+      <div class="brick-stud-spinner">
+        <div class="stud-spinner-top"></div>
+        <div class="stud-spinner-body"></div>
+      </div>
+      <p class="brick-spinner-message font-display">${message}</p>
+    </div>
+  `;
+  }
+  function renderError(parent, message) {
+    const container = document.createElement("div");
+    container.className = "brick-feedback-state error";
+    container.innerHTML = `
+    <div class="feedback-icon-wrapper error-icon">
+      <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+    </div>
+    <h3 class="feedback-title font-display text-danger">Detection Failed</h3>
+    <p class="feedback-desc">${message}</p>
+    <button type="button" class="brick-btn brick-btn-danger brick-btn-small" id="rescan-retry-btn">Retry</button>
+  `;
+    container.querySelector("#rescan-retry-btn").onclick = () => {
+      scanState = "idle";
+      renderScanner(parent);
+    };
+    parent.appendChild(container);
+  }
+  function renderResults(parent) {
+    parent.innerHTML = "";
+    const container = document.createElement("div");
+    container.className = "scanner-results-state";
+    const headerActions = document.createElement("div");
+    headerActions.className = "results-header-actions";
+    const title = document.createElement("h4");
+    title.className = "font-display";
+    title.textContent = `Pieces Identified (${candidates.length})`;
+    headerActions.appendChild(title);
+    const actionsGroup = document.createElement("div");
+    actionsGroup.className = "header-action-buttons";
+    if (candidates.length > 1) {
+      const addAllBtn = document.createElement("button");
+      addAllBtn.type = "button";
+      addAllBtn.className = "brick-btn brick-btn-success brick-btn-small";
+      addAllBtn.innerHTML = `Add All`;
+      addAllBtn.onclick = async () => {
+        const promises = candidates.map(async (cand, idx) => {
+          if (!addedIndices.has(idx)) {
+            await addInventoryItem({
+              part_id: cand.part.part_id,
+              quantity: 1,
+              source_image_key: cand.label
+            });
+            addedIndices.add(idx);
+          }
+        });
+        await Promise.all(promises);
+        triggerInventoryUpdate();
+        renderResults(parent);
+      };
+      actionsGroup.appendChild(addAllBtn);
+    }
+    const rescanBtn = document.createElement("button");
+    rescanBtn.type = "button";
+    rescanBtn.className = "brick-btn brick-btn-secondary brick-btn-small";
+    rescanBtn.innerHTML = `Rescan`;
+    rescanBtn.onclick = () => {
+      scanState = "idle";
+      candidates = [];
+      renderScanner(parent);
+    };
+    actionsGroup.appendChild(rescanBtn);
+    headerActions.appendChild(actionsGroup);
+    container.appendChild(headerActions);
+    const list = document.createElement("div");
+    list.className = "candidates-list";
+    candidates.forEach((cand, idx) => {
+      const isAdded = addedIndices.has(idx);
+      const itemCard = document.createElement("div");
+      itemCard.className = "brick-card candidate-card";
+      itemCard.innerHTML = `
+      <div class="brick-card-body">
+        <div class="candidate-card-layout">
+          <div class="candidate-image-wrapper">
+            <img src="${cand.part.reference_image_url}" alt="${cand.part.part_name}" class="candidate-part-img" />
+          </div>
+          <div class="candidate-info-wrapper">
+            <div class="candidate-header-row">
+              <span class="candidate-category font-display">${cand.part.category}</span>
+              <span class="confidence-badge ${cand.confidence > 90 ? "high" : ""}">${cand.confidence}% Match</span>
+            </div>
+            <h5 class="candidate-name font-display">${cand.part.part_name}</h5>
+            
+            <div class="candidate-actions">
+              ${isAdded ? `<div class="added-badge font-display text-success">
+                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:middle;margin-right:4px"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+                     Added to Bin
+                   </div>` : `<button type="button" class="brick-btn brick-btn-primary brick-btn-small add-to-bin-btn">Add to bin</button>`}
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+      const addBtn = itemCard.querySelector(".add-to-bin-btn");
+      if (addBtn) {
+        addBtn.onclick = async () => {
+          try {
+            await addInventoryItem({
+              part_id: cand.part.part_id,
+              quantity: 1,
+              source_image_key: cand.label
+            });
+            addedIndices.add(idx);
+            triggerInventoryUpdate();
+            renderResults(parent);
+          } catch (err) {
+            alert("Could not add item");
+          }
+        };
+      }
+      list.appendChild(itemCard);
+    });
+    container.appendChild(list);
+    parent.appendChild(container);
+  }
+
+  // js/components/inventory.js
+  function getBrickColorStyles(colorName) {
+    const colors = {
+      "Red": { bg: "#D01012", text: "#FFFFFF" },
+      "Blue": { bg: "#0057A6", text: "#FFFFFF" },
+      "Yellow": { bg: "#FFD500", text: "#22222A" },
+      "White": { bg: "#FFFFFF", text: "#22222A" },
+      "Grey": { bg: "#5B5B66", text: "#FFFFFF" },
+      "Green": { bg: "#1E7A34", text: "#FFFFFF" }
+    };
+    return colors[colorName] || { bg: "#E2E8F0", text: "#22222A" };
+  }
+  var inventoryItems = [];
+  var inventoryLoading = true;
+  var inventoryError = null;
+  var searchQuery = "";
+  var selectedCategory = "All";
+  var selectedColor = "All";
+  var resizeObserver = null;
+  var currentWidthClass = "width-wide";
+  function renderInventory(parentEl) {
+    parentEl.innerHTML = "";
+    const container = document.createElement("div");
+    container.className = `inventory-panel-container ${currentWidthClass}`;
+    if (resizeObserver) resizeObserver.disconnect();
+    resizeObserver = new ResizeObserver((entries) => {
+      for (let entry of entries) {
+        const width = entry.contentRect.width;
+        let nextClass = "width-wide";
+        if (width < 360) {
+          nextClass = "width-narrow";
+        } else if (width < 480) {
+          nextClass = "width-medium";
+        }
+        if (nextClass !== currentWidthClass) {
+          currentWidthClass = nextClass;
+          container.className = `inventory-panel-container ${currentWidthClass}`;
+        }
+      }
+    });
+    setTimeout(() => {
+      const panelDom = document.getElementById("panel-inventory");
+      if (panelDom) resizeObserver.observe(panelDom);
+    }, 100);
+    if (inventoryLoading && inventoryItems.length === 0) {
+      loadInventoryData(parentEl);
+      return;
+    }
+    const headerSearch = document.createElement("div");
+    headerSearch.className = "inventory-header-search";
+    const searchBox = document.createElement("div");
+    searchBox.className = "search-box-wrapper";
+    searchBox.innerHTML = `
+    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="search-icon"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+    <input type="text" class="search-input" placeholder="Search parts bin..." id="inv-search-input" value="${searchQuery}" />
+  `;
+    const searchInput = searchBox.querySelector("#inv-search-input");
+    searchInput.oninput = (e) => {
+      searchQuery = e.target.value;
+      renderListBody(container);
+    };
+    headerSearch.appendChild(searchBox);
+    const selectBox = document.createElement("div");
+    selectBox.className = "category-select-wrapper";
+    const categories = ["All", ...new Set(inventoryItems.map((i) => i.category))];
+    let selectOptions = categories.map((cat) => `<option value="${cat}" ${selectedCategory === cat ? "selected" : ""}>Type: ${cat}</option>`).join("");
+    selectBox.innerHTML = `
+    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" class="filter-icon"><rect x="3" y="9" width="18" height="10" rx="2" ry="2"></rect><circle cx="8" cy="5" r="2" fill="currentColor"></circle><circle cx="16" cy="5" r="2" fill="currentColor"></circle></svg>
+    <select class="category-select font-display" id="inv-category-select">
+      ${selectOptions}
+    </select>
+  `;
+    const categorySelect = selectBox.querySelector("#inv-category-select");
+    categorySelect.onchange = (e) => {
+      selectedCategory = e.target.value;
+      renderListBody(container);
+    };
+    headerSearch.appendChild(selectBox);
+    const colorSelectBox = document.createElement("div");
+    colorSelectBox.className = "category-select-wrapper color-select-wrapper";
+    const colors = ["All", ...new Set(inventoryItems.map((i) => parsePartNameAndColor(i.part_name).color))];
+    let colorOptions = colors.map((col) => `<option value="${col}" ${selectedColor === col ? "selected" : ""}>Colour: ${col}</option>`).join("");
+    colorSelectBox.innerHTML = `
+    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" class="filter-icon"><path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5C6 11.1 5 13 5 15a7 7 0 0 0 7 7z" fill="currentColor"></path></svg>
+    <select class="category-select font-display" id="inv-color-select">
+      ${colorOptions}
+    </select>
+  `;
+    const colorSelect = colorSelectBox.querySelector("#inv-color-select");
+    colorSelect.onchange = (e) => {
+      selectedColor = e.target.value;
+      renderListBody(container);
+    };
+    headerSearch.appendChild(colorSelectBox);
+    container.appendChild(headerSearch);
+    const totalsBar = document.createElement("div");
+    totalsBar.className = "inventory-running-totals font-display";
+    totalsBar.id = "inv-totals-bar";
+    container.appendChild(totalsBar);
+    const listPlaceholder = document.createElement("div");
+    listPlaceholder.id = "inv-list-placeholder";
+    listPlaceholder.style.flex = "1";
+    listPlaceholder.style.display = "flex";
+    listPlaceholder.style.flexDirection = "column";
+    container.appendChild(listPlaceholder);
+    const floatingAddBtn = document.createElement("button");
+    floatingAddBtn.type = "button";
+    floatingAddBtn.className = "inventory-floating-add-btn";
+    floatingAddBtn.title = "Add Piece Manually";
+    floatingAddBtn.innerHTML = `
+    <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+  `;
+    floatingAddBtn.onclick = (e) => {
+      e.stopPropagation();
+      spawnStandalonePanel("addPart", {});
+    };
+    container.appendChild(floatingAddBtn);
+    parentEl.appendChild(container);
+    renderListBody(container);
+  }
+  async function loadInventoryData(parent) {
+    inventoryLoading = true;
+    inventoryError = null;
+    renderSpinner2(parent, "Retrieving catalogued parts...");
+    try {
+      const data = await getInventory();
+      inventoryItems = data;
+      inventoryLoading = false;
+      renderInventory(parent);
+    } catch (err) {
+      inventoryError = "Could not retrieve your brick inventory.";
+      inventoryLoading = false;
+      renderErrorState(parent);
+    }
+  }
+  function renderListBody(container) {
+    const listPlaceholder = container.querySelector("#inv-list-placeholder");
+    const totalsBar = container.querySelector("#inv-totals-bar");
+    if (!listPlaceholder) return;
+    listPlaceholder.innerHTML = "";
+    const filtered = inventoryItems.filter((item) => {
+      const parsed = parsePartNameAndColor(item.part_name);
+      const matchesSearch = parsed.name.toLowerCase().includes(searchQuery.toLowerCase());
+      const matchesCat = selectedCategory === "All" || item.category === selectedCategory;
+      const matchesColor = selectedColor === "All" || parsed.color === selectedColor;
+      return matchesSearch && matchesCat && matchesColor;
+    });
+    const totalCount = inventoryItems.reduce((acc, curr) => acc + curr.quantity, 0);
+    const categories = ["All", ...new Set(inventoryItems.map((i) => i.category))];
+    totalsBar.innerHTML = `
+    <span>Bricks Catalogued: ${totalCount} total</span>
+    <span>Categories: ${categories.length - 1}</span>
+  `;
+    if (filtered.length === 0) {
+      const emptyState = document.createElement("div");
+      emptyState.className = "brick-feedback-state empty";
+      emptyState.innerHTML = `
+      <div class="feedback-icon-wrapper">
+        <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+      </div>
+      <h3 class="feedback-title font-display">${searchQuery ? "No filter matches" : "Inventory is empty"}</h3>
+      <p class="feedback-desc">
+        ${searchQuery ? "Try widening your search terms or category filter." : "Add parts from the Scanner Panel to compile your inventory!"}
+      </p>
+    `;
+      listPlaceholder.appendChild(emptyState);
+      return;
+    }
+    const grid = document.createElement("div");
+    grid.className = "inventory-items-grid";
+    filtered.forEach((item) => {
+      const parsed = parsePartNameAndColor(item.part_name);
+      const colorStyles = getBrickColorStyles(parsed.color);
+      const card = document.createElement("div");
+      card.className = "brick-card inventory-part-card";
+      card.innerHTML = `
+      <div class="part-card-inner">
+        <div class="part-img-holder">
+          <img src="${item.reference_image_url}" alt="${parsed.name}" />
+        </div>
+        <div class="part-card-content">
+          <div class="part-meta-row font-display" style="display:flex; gap:5px; margin-bottom:4px">
+            <span class="part-badge-cat" style="background-color: var(--cream-200); border: 1.5px solid var(--ink-900); border-radius: 4px; padding: 1px 4px; font-size: 0.62rem; font-weight: 800; text-transform: uppercase; color: var(--ink-900);">${item.category}</span>
+            <span class="part-badge-color" style="background-color: ${colorStyles.bg}; color: ${colorStyles.text}; border: 1.5px solid var(--ink-900); border-radius: 4px; padding: 1px 4px; font-size: 0.62rem; font-weight: 800; text-transform: uppercase;">${parsed.color}</span>
+          </div>
+          <h6 class="part-display-name font-display" title="${parsed.name}">${parsed.name}</h6>
+          
+          <div class="part-card-footer-actions" style="display: flex; align-items: center; justify-content: space-between; gap: 6px; margin-top: auto; width: 100%;">
+            <div class="qty-picker" style="display: flex; align-items: center; border: 2px solid var(--ink-900); border-radius: 6px; background-color: var(--white); overflow: hidden; flex-shrink: 0; height: 22px;">
+              <button type="button" class="qty-picker-btn font-display decrease-btn" style="background: transparent; border: none; width: 22px; height: 22px; display: flex; align-items: center; justify-content: center; cursor: pointer; color: var(--ink-900); padding: 0;"><svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="5" y1="12" x2="19" y2="12"></line></svg></button>
+              <input type="number" class="qty-value font-display qty-input" value="${item.quantity}" style="width: 26px; text-align: center; border: none; background: transparent; padding: 0; outline: none; font-weight: 800; font-size: 0.75rem; -moz-appearance: textfield; color: var(--ink-900); margin: 0; border-left: 2px solid var(--ink-900); border-right: 2px solid var(--ink-900); height: 22px;" />
+              <button type="button" class="qty-picker-btn font-display increase-btn" style="background: transparent; border: none; width: 22px; height: 22px; display: flex; align-items: center; justify-content: center; cursor: pointer; color: var(--ink-900); padding: 0;"><svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg></button>
+            </div>
+            <button type="button" class="part-popout-btn popout-btn" title="Drag out to Workspace" style="padding: 0; border: 2px solid var(--ink-900); background-color: var(--white); border-radius: 6px; box-shadow: 0 2px 0 var(--ink-900); display: flex; align-items: center; justify-content: center; cursor: pointer; color: var(--grey-600); width: 22px; height: 22px; box-sizing: border-box; flex-shrink: 0;">
+              <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
+            </button>
+            <button type="button" class="part-delete-btn delete-btn" title="Remove item" style="padding: 0; border: 2px solid var(--ink-900); background-color: var(--white); border-radius: 6px; box-shadow: 0 2px 0 var(--ink-900); display: flex; align-items: center; justify-content: center; cursor: pointer; color: var(--grey-600); width: 22px; height: 22px; box-sizing: border-box; flex-shrink: 0;">
+              <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
+            </button>
+          </div>
+        </div>
+      </div>
+    `;
+      card.querySelector(".decrease-btn").onclick = (e) => {
+        e.stopPropagation();
+        adjustQuantity(item.inventory_id, item.quantity - 1, container);
+      };
+      card.querySelector(".increase-btn").onclick = (e) => {
+        e.stopPropagation();
+        adjustQuantity(item.inventory_id, item.quantity + 1, container);
+      };
+      card.querySelector(".delete-btn").onclick = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        removePiece(item.inventory_id, container);
+      };
+      card.querySelector(".popout-btn").onclick = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        spawnStandalonePanel("part", item);
+      };
+      card.querySelector(".qty-input").onchange = (e) => {
+        let val = parseInt(e.target.value);
+        if (isNaN(val) || val < 0) val = 0;
+        adjustQuantity(item.inventory_id, val, container);
+      };
+      card.querySelector(".qty-input").onclick = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+      };
+      grid.appendChild(card);
+    });
+    listPlaceholder.appendChild(grid);
+  }
+  async function adjustQuantity(inventory_id, newQty, container) {
+    try {
+      if (newQty <= 0) {
+        if (confirm("Are you sure you want to remove this part from your inventory?")) {
+          await deleteInventoryItem(inventory_id);
+        } else {
+          const data2 = await getInventory();
+          inventoryItems = data2;
+          triggerInventoryUpdate();
+          renderListBody(container);
+          return;
+        }
+      } else {
+        await updateInventoryItem(inventory_id, { quantity: newQty });
+      }
+      const data = await getInventory();
+      inventoryItems = data;
+      triggerInventoryUpdate();
+      renderListBody(container);
+    } catch (err) {
+      alert("Failed to update brick count");
+    }
+  }
+  async function removePiece(inventory_id, container) {
+    const confirmation = confirm("Are you sure you want to remove this part from your inventory?");
+    if (!confirmation) {
+      return;
+    }
+    try {
+      await deleteInventoryItem(inventory_id);
+      const data = await getInventory();
+      inventoryItems = data;
+      triggerInventoryUpdate();
+      renderListBody(container);
+    } catch (err) {
+      alert("Failed to remove piece");
+    }
+  }
+  function renderSpinner2(parent, message) {
+    parent.innerHTML = `
+    <div class="brick-spinner-container" style="height:100%">
+      <div class="brick-stud-spinner">
+        <div class="stud-spinner-top"></div>
+        <div class="stud-spinner-body"></div>
+      </div>
+      <p class="brick-spinner-message font-display">${message}</p>
+    </div>
+  `;
+  }
+  function renderErrorState(parent) {
+    parent.innerHTML = `
+    <div class="brick-feedback-state error">
+      <div class="feedback-icon-wrapper error-icon">
+        <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+      </div>
+      <h3 class="feedback-title font-display text-danger">Inventory Load Failed</h3>
+      <p class="feedback-desc">${inventoryError}</p>
+      <button type="button" class="brick-btn brick-btn-danger brick-btn-small" id="inv-retry-btn">Retry</button>
+    </div>
+  `;
+    parent.querySelector("#inv-retry-btn").onclick = () => {
+      loadInventoryData(parent);
+    };
+  }
+  function forceReloadInventory() {
+    inventoryLoading = true;
+    inventoryItems = [];
+  }
+
+  // js/api/builds.js
+  var sleep4 = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+  function calculatePctOwned(build) {
+    let totalRequired = 0;
+    let totalOwned = 0;
+    build.parts.forEach((req) => {
+      totalRequired += req.quantity_required;
+      const invItem = mockInventory.find((i) => i.part_id === req.part_id);
+      const ownedCount = invItem ? invItem.quantity : 0;
+      totalOwned += Math.min(ownedCount, req.quantity_required);
+    });
+    if (totalRequired === 0) return 100;
+    return Math.round(totalOwned / totalRequired * 100);
+  }
+  async function getBuilds() {
+    if (!IS_MOCKED) {
+      const res = await fetch(`${API_BASE_URL}/builds`, {
+        headers: { ...authHeader() }
+      });
+      if (!res.ok) throw new Error("Failed to fetch builds");
+      return await res.json();
+    }
+    await sleep4(700);
+    return MOCK_BUILDS.map((build) => ({
+      build_id: build.build_id,
+      build_name: build.build_name,
+      description: build.description,
+      difficulty: build.difficulty,
+      hero_image_url: build.hero_image_url,
+      pct_owned: calculatePctOwned(build)
+    }));
+  }
+  async function getBuildDetail(build_id) {
+    if (!IS_MOCKED) {
+      const res = await fetch(`${API_BASE_URL}/builds/${build_id}`, {
+        headers: { ...authHeader() }
+      });
+      if (!res.ok) throw new Error("Failed to fetch build detail");
+      return await res.json();
+    }
+    await sleep4(500);
+    const build = MOCK_BUILDS.find((b) => b.build_id === build_id);
+    if (!build) {
+      throw new Error(`Build idea ${build_id} not found`);
+    }
+    const detailedParts = build.parts.map((req) => {
+      const partRef = MOCK_PARTS.find((p) => p.part_id === req.part_id);
+      const invItem = mockInventory.find((i) => i.part_id === req.part_id);
+      const quantity_owned = invItem ? invItem.quantity : 0;
+      return {
+        part_id: req.part_id,
+        part_name: partRef ? partRef.part_name : req.part_name,
+        reference_image_url: partRef ? partRef.reference_image_url : "",
+        quantity_required: req.quantity_required,
+        quantity_owned
+      };
+    });
+    return {
+      build_id: build.build_id,
+      build_name: build.build_name,
+      description: build.description,
+      difficulty: build.difficulty,
+      hero_image_url: build.hero_image_url,
+      parts: detailedParts,
+      steps: build.steps || []
+    };
+  }
+
+  // js/components/builds.js
+  var buildsList = [];
+  var activeBuildId = null;
+  var activeBuildDetail = null;
+  var buildsPanelBody = null;
+  var buildsLoading = true;
+  var buildsError = null;
+  var detailLoading = false;
+  var detailError = null;
+  function renderBuilds(parentEl) {
+    buildsPanelBody = parentEl;
+    parentEl.innerHTML = "";
+    const container = document.createElement("div");
+    container.className = "builds-panel-container";
+    if (activeBuildId !== null) {
+      renderDetailView(container);
+    } else {
+      renderCatalogView(container);
+    }
+    parentEl.appendChild(container);
+  }
+  function renderCatalogView(container) {
+    const catalogView = document.createElement("div");
+    catalogView.className = "build-catalog-view";
+    if (buildsLoading && buildsList.length === 0) {
+      loadBuildsCatalog(container);
+      return;
+    }
+    if (buildsError) {
+      renderError2(catalogView, buildsError, () => loadBuildsCatalog(container));
+      container.appendChild(catalogView);
+      return;
+    }
+    if (buildsList.length === 0) {
+      renderEmpty(catalogView);
+      container.appendChild(catalogView);
+      return;
+    }
+    const list = document.createElement("div");
+    list.className = "builds-list";
+    buildsList.forEach((build) => {
+      const is100Percent = build.pct_owned === 100;
+      const card = document.createElement("div");
+      card.className = "build-card";
+      card.onclick = () => selectBuild(build.build_id, container);
+      card.innerHTML = `
+      <img src="${build.hero_image_url}" alt="${build.build_name}" class="build-img" />
+      <button type="button" class="build-popout-btn popout-btn" title="View Instructions" style="position: absolute; top: 8px; left: 8px; width: 28px; height: 28px; border-radius: 6px; border: 2.5px solid var(--ink-900); background-color: var(--brick-blue); display: flex; align-items: center; justify-content: center; cursor: pointer; z-index: 5; box-shadow: 0 2.5px 0 var(--ink-900)">
+        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--white)" stroke-width="2.5"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
+      </button>
+      <div class="build-info">
+        <span class="build-difficulty-tag font-display">${build.difficulty}</span>
+        <h4>${build.build_name}</h4>
+        
+        <div class="progress-container">
+          <div class="progress-bar" style="width: ${build.pct_owned}%; background-color: ${is100Percent ? "var(--brick-green)" : "var(--brick-purple)"}"></div>
+        </div>
+        <span class="pct-text font-display">${build.pct_owned}% of parts owned</span>
+      </div>
+      ${is100Percent ? `<span class="build-ready-tag font-display">
+             <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline-block;vertical-align:middle;margin-right:2px"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
+             Ready!
+           </span>` : ""}
+    `;
+      card.querySelector(".popout-btn").onclick = (e) => {
+        e.stopPropagation();
+        spawnStandalonePanel("build", {
+          build_id: build.build_id,
+          name: build.build_name,
+          hero_image_url: build.hero_image_url
+        });
+      };
+      list.appendChild(card);
+    });
+    catalogView.appendChild(list);
+    container.appendChild(catalogView);
+  }
+  function renderDetailView(container) {
+    const detailView = document.createElement("div");
+    detailView.className = "build-detail-view";
+    const backBtn = document.createElement("button");
+    backBtn.type = "button";
+    backBtn.className = "back-btn font-display";
+    backBtn.innerHTML = `
+    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>
+    Back to builds
+  `;
+    backBtn.onclick = () => {
+      activeBuildId = null;
+      activeBuildDetail = null;
+      renderBuilds(buildsPanelBody);
+    };
+    detailView.appendChild(backBtn);
+    const popoutBtn = document.createElement("button");
+    popoutBtn.type = "button";
+    popoutBtn.className = "back-btn font-display";
+    popoutBtn.style.marginLeft = "8px";
+    popoutBtn.style.backgroundColor = "var(--brick-blue)";
+    popoutBtn.style.color = "var(--white)";
+    popoutBtn.style.border = "2.5px solid var(--ink-900)";
+    popoutBtn.style.boxShadow = "0 2.5px 0 var(--ink-900)";
+    popoutBtn.innerHTML = `
+    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="margin-right:4px"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
+    View Instructions
+  `;
+    popoutBtn.onclick = () => {
+      spawnStandalonePanel("build", {
+        build_id: activeBuildDetail.build_id,
+        name: activeBuildDetail.build_name,
+        hero_image_url: activeBuildDetail.hero_image_url
+      });
+    };
+    detailView.appendChild(popoutBtn);
+    if (detailLoading) {
+      renderSpinner3(detailView, "Retrieving schematic parts checklist...");
+      container.appendChild(detailView);
+      return;
+    }
+    if (detailError) {
+      renderError2(detailView, detailError, () => selectBuild(activeBuildId, container));
+      container.appendChild(detailView);
+      return;
+    }
+    if (activeBuildDetail) {
+      const detailContent = document.createElement("div");
+      detailContent.className = "detail-content-scroll";
+      const hero = document.createElement("img");
+      hero.className = "detail-hero";
+      hero.src = activeBuildDetail.hero_image_url;
+      hero.alt = activeBuildDetail.build_name;
+      detailContent.appendChild(hero);
+      const title = document.createElement("h4");
+      title.className = "detail-title font-display";
+      title.textContent = activeBuildDetail.build_name;
+      detailContent.appendChild(title);
+      const desc = document.createElement("p");
+      desc.className = "detail-desc";
+      desc.textContent = activeBuildDetail.description;
+      detailContent.appendChild(desc);
+      const listTitle = document.createElement("h5");
+      listTitle.className = "parts-title font-display";
+      listTitle.textContent = "Required Parts";
+      detailContent.appendChild(listTitle);
+      const partsList = document.createElement("div");
+      partsList.className = "parts-list";
+      activeBuildDetail.parts.forEach((part) => {
+        const isComplete = part.quantity_owned >= part.quantity_required;
+        const missingCount = part.quantity_required - part.quantity_owned;
+        const partRow = document.createElement("div");
+        partRow.className = `part-req-row ${isComplete ? "complete" : ""}`;
+        partRow.innerHTML = `
+        <img src="${part.reference_image_url}" alt="${part.part_name}" class="part-req-img" />
+        <div class="part-req-info font-body">
+          <div style="flex:1">
+            <span class="part-req-name font-display" style="display:block">${part.part_name}</span>
+            <span style="font-size:0.75rem;color:var(--grey-600)">Owned: ${part.quantity_owned} / Required: ${part.quantity_required}</span>
+          </div>
+          <div class="part-req-qty">
+            ${isComplete ? `<span style="color:var(--brick-green)"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg></span>` : `<span class="status-indicator warning font-display" style="background-color:rgba(255,213,0,0.15);border:1.5px solid var(--ink-900);border-radius:6px;font-size:0.7rem;font-weight:800;color:var(--ink-900);padding:2px 6px;display:flex;align-items:center;gap:4px">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+                  <span>+${missingCount}</span>
+                 </span>`}
+          </div>
+        </div>
+      `;
+        partsList.appendChild(partRow);
+      });
+      detailContent.appendChild(partsList);
+      detailView.appendChild(detailContent);
+    }
+    container.appendChild(detailView);
+  }
+  async function loadBuildsCatalog(container) {
+    buildsLoading = true;
+    buildsError = null;
+    renderSpinner3(container, "Calculating matching build plans...");
+    try {
+      const data = await getBuilds();
+      buildsList = data;
+      buildsLoading = false;
+      renderBuilds(buildsPanelBody);
+    } catch (err) {
+      buildsError = "Could not retrieve build templates.";
+      buildsLoading = false;
+      renderBuilds(buildsPanelBody);
+    }
+  }
+  async function selectBuild(buildId, container) {
+    activeBuildId = buildId;
+    detailLoading = true;
+    detailError = null;
+    renderBuilds(buildsPanelBody);
+    try {
+      const data = await getBuildDetail(buildId);
+      activeBuildDetail = data;
+      detailLoading = false;
+      renderBuilds(buildsPanelBody);
+    } catch (err) {
+      detailError = "Could not fetch build instructions details.";
+      detailLoading = false;
+      renderBuilds(buildsPanelBody);
+    }
+  }
+  function renderSpinner3(parent, message) {
+    const spinner = document.createElement("div");
+    spinner.className = "brick-spinner-container";
+    spinner.style.height = "100%";
+    spinner.innerHTML = `
+    <div class="brick-stud-spinner">
+      <div class="stud-spinner-top"></div>
+      <div class="stud-spinner-body"></div>
+    </div>
+    <p class="brick-spinner-message font-display">${message}</p>
+  `;
+    parent.appendChild(spinner);
+  }
+  function renderError2(parent, message, onRetry) {
+    const errState = document.createElement("div");
+    errState.className = "brick-feedback-state error";
+    errState.innerHTML = `
+    <div class="feedback-icon-wrapper error-icon">
+      <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+    </div>
+    <h3 class="feedback-title font-display text-danger">Error Loading</h3>
+    <p class="feedback-desc">${message}</p>
+    <button type="button" class="brick-btn brick-btn-danger brick-btn-small" id="builds-retry-btn">Retry</button>
+  `;
+    errState.querySelector("#builds-retry-btn").onclick = onRetry;
+    parent.appendChild(errState);
+  }
+  function renderEmpty(parent) {
+    const empty = document.createElement("div");
+    empty.className = "brick-feedback-state empty";
+    empty.innerHTML = `
+    <div class="feedback-icon-wrapper">
+      <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+    </div>
+    <h3 class="feedback-title font-display">No builds discovered</h3>
+    <p class="feedback-desc">No blueprints are matching the database.</p>
+  `;
+    parent.appendChild(empty);
+  }
+  async function reloadActiveBuildDetail() {
+    if (activeBuildId === null) return;
+    detailLoading = true;
+    detailError = null;
+    if (buildsPanelBody) {
+      renderBuilds(buildsPanelBody);
+    }
+    try {
+      const data = await getBuildDetail(activeBuildId);
+      activeBuildDetail = data;
+      detailLoading = false;
+      if (buildsPanelBody) {
+        renderBuilds(buildsPanelBody);
+      }
+    } catch (err) {
+      detailError = "Could not fetch build instructions details.";
+      detailLoading = false;
+      if (buildsPanelBody) {
+        renderBuilds(buildsPanelBody);
+      }
+    }
+  }
+  function forceReloadBuilds() {
+    buildsLoading = true;
+    buildsList = [];
+    if (activeBuildId !== null) {
+      reloadActiveBuildDetail();
+    }
+  }
+  function closeBuildDetails() {
+    activeBuildId = null;
+    activeBuildDetail = null;
+  }
+
+  // js/components/addPart.js
+  function renderAddPartPanel(bodyEl, panelId) {
+    bodyEl.innerHTML = "";
+    bodyEl.style.padding = "16px";
+    bodyEl.style.boxSizing = "border-box";
+    bodyEl.style.display = "flex";
+    bodyEl.style.flexDirection = "column";
+    bodyEl.style.gap = "12px";
+    const form = document.createElement("div");
+    form.className = "add-part-form";
+    form.style.display = "flex";
+    form.style.flexDirection = "column";
+    form.style.gap = "12px";
+    form.innerHTML = `
+    <div class="input-group" style="display:flex; flex-direction:column; gap:4px;">
+      <label class="input-label font-display" style="font-size:0.72rem; font-weight:800; text-transform:uppercase; color:var(--ink-900);">Part Shape</label>
+      <select class="part-shape-select font-body" style="width:100%; height:36px; border:2.5px solid var(--ink-900); border-radius:6px; font-weight:800; padding:0 8px; background:var(--white); outline:none; box-sizing:border-box; color:var(--ink-900);">
+        <option value="2x4 Brick|brick-2x4|Brick">2x4 Brick</option>
+        <option value="2x2 Brick|brick-2x2|Brick">2x2 Brick</option>
+        <option value="1x2 Plate|plate-1x2|Plate">1x2 Plate</option>
+        <option value="2x2 Plate|plate-2x2|Plate">2x2 Plate</option>
+        <option value="2x4 Plate|plate-2x4|Plate">2x4 Plate</option>
+        <option value="2x2 Slope 45\xB0|slope-2x2|Slope">2x2 Slope 45\xB0</option>
+        <option value="Technic 1x1 Brick|technic-1x1|Technic">Technic 1x1 Brick</option>
+      </select>
+    </div>
+
+    <div class="input-group" style="display:flex; flex-direction:column; gap:4px;">
+      <label class="input-label font-display" style="font-size:0.72rem; font-weight:800; text-transform:uppercase; color:var(--ink-900);">Part Color</label>
+      <select class="part-color-select font-body" style="width:100%; height:36px; border:2.5px solid var(--ink-900); border-radius:6px; font-weight:800; padding:0 8px; background:var(--white); outline:none; box-sizing:border-box; color:var(--ink-900);">
+        <option value="Red|#D01012">Red</option>
+        <option value="Blue|#0057A6">Blue</option>
+        <option value="Yellow|#FFD500">Yellow</option>
+        <option value="Green|#1E7A34">Green</option>
+        <option value="Grey|#5B5B66">Grey</option>
+        <option value="White|#FFFFFF">White</option>
+      </select>
+    </div>
+
+    <div class="input-group" style="display:flex; flex-direction:column; gap:4px;">
+      <label class="input-label font-display" style="font-size:0.72rem; font-weight:800; text-transform:uppercase; color:var(--ink-900);">Quantity</label>
+      <div class="qty-picker" style="display:inline-flex; align-items:center; border:2.5px solid var(--ink-900); border-radius:6px; background:var(--white); overflow:hidden; height:32px; width: fit-content;">
+        <button type="button" class="manual-qty-btn dec-qty" style="width:32px; height:100%; border:none; background:transparent; font-size:1.1rem; font-weight:800; cursor:pointer; display:flex; align-items:center; justify-content:center; padding:0; color:var(--ink-900);">-</button>
+        <input type="number" class="manual-qty-val font-body" value="1" style="width:40px; text-align:center; border:none; background:transparent; font-weight:800; outline:none; border-left:2.5px solid var(--ink-900); border-right:2.5px solid var(--ink-900); height:100%; margin:0; color:var(--ink-900); -moz-appearance: textfield;" />
+        <button type="button" class="manual-qty-btn inc-qty" style="width:32px; height:100%; border:none; background:transparent; font-size:1.1rem; font-weight:800; cursor:pointer; display:flex; align-items:center; justify-content:center; padding:0; color:var(--ink-900);">+</button>
+      </div>
+    </div>
+
+    <button type="button" class="brick-btn brick-btn-primary add-part-submit-btn font-display" style="width:100%; margin-top:12px; height:40px; border:2.5px solid var(--ink-900); box-shadow:0 3px 0 var(--ink-900);">Add to Bin</button>
+  `;
+    const decBtn = form.querySelector(".dec-qty");
+    const incBtn = form.querySelector(".inc-qty");
+    const qtyInput = form.querySelector(".manual-qty-val");
+    const submitBtn = form.querySelector(".add-part-submit-btn");
+    decBtn.onclick = () => {
+      let val = parseInt(qtyInput.value);
+      if (isNaN(val) || val <= 1) val = 1;
+      else val--;
+      qtyInput.value = val;
+    };
+    incBtn.onclick = () => {
+      let val = parseInt(qtyInput.value);
+      if (isNaN(val)) val = 1;
+      else val++;
+      qtyInput.value = val;
+    };
+    submitBtn.onclick = async () => {
+      const shapeVal = form.querySelector(".part-shape-select").value.split("|");
+      const colorVal = form.querySelector(".part-color-select").value.split("|");
+      const qty = parseInt(qtyInput.value) || 1;
+      const shapeName = shapeVal[0];
+      const shapeType = shapeVal[1];
+      const shapeCategory = shapeVal[2];
+      const colorName = colorVal[0];
+      const colorHex = colorVal[1];
+      const partName = `${shapeName} (${colorName})`;
+      let existingPart = MOCK_PARTS.find((p) => p.type === shapeType && p.color === colorHex);
+      let partId;
+      if (existingPart) {
+        partId = existingPart.part_id;
+      } else {
+        partId = Math.max(...MOCK_PARTS.map((p) => p.part_id), 0) + 1;
+        MOCK_PARTS.push({
+          part_id: partId,
+          part_name: partName,
+          category: shapeCategory,
+          color: colorHex,
+          type: shapeType,
+          reference_image_url: getBrickSvg(colorHex, shapeType)
+        });
+      }
+      try {
+        await addInventoryItem({
+          part_id: partId,
+          quantity: qty,
+          source_image_key: null
+        });
+        triggerInventoryUpdate();
+        closePanel(panelId);
+      } catch (err) {
+        alert("Failed to add part: " + err.message);
+      }
+    };
+    bodyEl.appendChild(form);
+  }
+
+  // js/components/workspace.js
+  function renderWorkspace(parentEl, state2, isPositionOnly = false) {
+    const existingContainer = parentEl.querySelector(".workspace-container");
+    if (existingContainer) {
+      existingContainer.setAttribute("data-theme", state2.theme);
+      existingContainer.setAttribute("data-studs", state2.studStyle);
+      existingContainer.classList.toggle("hct-pattern-active", state2.hctPatternEnabled);
+      const baseplate2 = existingContainer.querySelector(".workspace-baseplate");
+      const mountedPanelEls = baseplate2.querySelectorAll(".panel-container");
+      mountedPanelEls.forEach((panelEl) => {
+        const domId = panelEl.id.replace("panel-", "");
+        const panelState = state2.panels[domId];
+        if (!panelState || !panelState.isOpen) {
+          panelEl.remove();
+        }
+      });
+      Object.keys(state2.panels).forEach((key) => {
+        const panelState = state2.panels[key];
+        const panelEl = document.getElementById(`panel-${panelState.id}`);
+        if (panelState.isOpen) {
+          const viewportW = window.innerWidth;
+          const viewportH = window.innerHeight;
+          const clampedWidth = Math.min(panelState.width, viewportW - 16);
+          const clampedHeight = Math.min(panelState.height, viewportH - 80);
+          const clampedX = Math.max(8, Math.min(panelState.x, viewportW - clampedWidth - 8));
+          const clampedY = Math.max(8, Math.min(panelState.y, viewportH - clampedHeight - 80));
+          if (panelEl) {
+            panelEl.style.left = `${clampedX}px`;
+            panelEl.style.top = `${clampedY}px`;
+            panelEl.style.width = `${clampedWidth}px`;
+            panelEl.style.height = panelState.isCollapsed ? "54px" : `${clampedHeight}px`;
+            panelEl.style.zIndex = panelState.zIndex;
+            const chrome = panelEl.querySelector(".panel-chrome");
+            if (chrome) {
+              if (panelState.isCollapsed) {
+                chrome.classList.add("is-collapsed");
+              } else {
+                chrome.classList.remove("is-collapsed");
+              }
+            }
+            const studsRow = panelEl.querySelector(".panel-studs-row");
+            if (studsRow) {
+              const numStuds = Math.max(4, Math.floor((clampedWidth - 32) / 60));
+              studsRow.innerHTML = "";
+              for (let i = 0; i < numStuds; i++) {
+                const stud = document.createElement("div");
+                stud.className = "panel-stud";
+                studsRow.appendChild(stud);
+              }
+            }
+            if (!isPositionOnly) {
+              const bodyContent = panelEl.querySelector(".panel-body-content");
+              if (bodyContent) {
+                if (panelState.id === "scanner") {
+                } else if (panelState.id === "inventory") {
+                  renderInventory(bodyContent);
+                } else if (panelState.id === "buildIdeas") {
+                  renderBuilds(bodyContent);
+                } else if (panelState.type === "part") {
+                  renderStandalonePart(bodyContent, panelState.data, panelState.id);
+                } else if (panelState.type === "build") {
+                  renderStandaloneBuild(bodyContent, panelState.data);
+                } else if (panelState.type === "addPart") {
+                  renderAddPartPanel(bodyContent, panelState.id);
+                }
+              }
+            }
+          } else {
+            const clampedPanelState = {
+              ...panelState,
+              x: clampedX,
+              y: clampedY,
+              width: clampedWidth,
+              height: clampedHeight
+            };
+            const newEl = createPanel(clampedPanelState, (body) => {
+              if (panelState.id === "scanner") renderScanner(body);
+              else if (panelState.id === "inventory") renderInventory(body);
+              else if (panelState.id === "buildIdeas") renderBuilds(body);
+              else if (panelState.type === "part") renderStandalonePart(body, panelState.data, panelState.id);
+              else if (panelState.type === "build") renderStandaloneBuild(body, panelState.data);
+              else if (panelState.type === "addPart") renderAddPartPanel(body, panelState.id);
+            });
+            if (newEl) baseplate2.appendChild(newEl);
+          }
+        }
+      });
+      const existingActionBar = existingContainer.querySelector(".action-bar-wrapper");
+      if (existingActionBar) {
+        const newActionBar = createActionBar(state2);
+        existingActionBar.replaceWith(newActionBar);
+      }
+      const settingsBackdrop = existingContainer.querySelector(".settings-overlay-backdrop");
+      if (state2.isSettingsOpen) {
+        renderSettingsModal(existingContainer, state2);
+      } else {
+        if (settingsBackdrop) settingsBackdrop.remove();
+      }
+      return;
+    }
+    parentEl.innerHTML = "";
+    const container = document.createElement("div");
+    container.className = "workspace-container";
+    container.setAttribute("data-theme", state2.theme);
+    container.setAttribute("data-studs", state2.studStyle);
+    container.classList.toggle("hct-pattern-active", state2.hctPatternEnabled);
+    const logoIcon = document.createElement("button");
+    logoIcon.type = "button";
+    logoIcon.className = "workspace-logo-icon";
+    logoIcon.title = "Open All Panels";
+    logoIcon.innerHTML = `<img src="assets/logo_icon.png" alt="Logo" />`;
+    logoIcon.onclick = (e) => {
+      e.stopPropagation();
+      openAllPanels();
+    };
+    container.appendChild(logoIcon);
+    const baseplate = document.createElement("div");
+    baseplate.className = "workspace-baseplate";
+    const dots = document.createElement("div");
+    dots.className = "workspace-dots";
+    baseplate.appendChild(dots);
+    Object.keys(state2.panels).forEach((key) => {
+      const panelState = state2.panels[key];
+      if (panelState.isOpen) {
+        const viewportW = window.innerWidth;
+        const viewportH = window.innerHeight;
+        const clampedWidth = Math.min(panelState.width, viewportW - 16);
+        const clampedHeight = Math.min(panelState.height, viewportH - 80);
+        const clampedX = Math.max(8, Math.min(panelState.x, viewportW - clampedWidth - 8));
+        const clampedY = Math.max(8, Math.min(panelState.y, viewportH - clampedHeight - 80));
+        const clampedPanelState = {
+          ...panelState,
+          x: clampedX,
+          y: clampedY,
+          width: clampedWidth,
+          height: clampedHeight
+        };
+        const el = createPanel(clampedPanelState, (body) => {
+          if (panelState.id === "scanner") renderScanner(body);
+          else if (panelState.id === "inventory") renderInventory(body);
+          else if (panelState.id === "buildIdeas") renderBuilds(body);
+          else if (panelState.type === "part") renderStandalonePart(body, panelState.data, panelState.id);
+          else if (panelState.type === "build") renderStandaloneBuild(body, panelState.data);
+          else if (panelState.type === "addPart") renderAddPartPanel(body, panelState.id);
+        });
+        if (el) baseplate.appendChild(el);
+      }
+    });
+    container.appendChild(baseplate);
+    const actionbarEl = createActionBar(state2);
+    container.appendChild(actionbarEl);
+    const menuContainer = document.createElement("div");
+    menuContainer.className = "profile-menu-container";
+    const profileBtn = document.createElement("button");
+    profileBtn.type = "button";
+    profileBtn.className = "workspace-profile-btn";
+    profileBtn.title = "Profile & Options";
+    profileBtn.innerHTML = `
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="32" height="32" style="display:block">
+      <rect x="38" y="5" width="24" height="10" rx="2" fill="#FFD500" stroke="#22222A" stroke-width="6"/>
+      <rect x="25" y="15" width="50" height="52" rx="14" fill="#FFD500" stroke="#22222A" stroke-width="6"/>
+      <circle cx="40" cy="35" r="4.5" fill="#22222A"/>
+      <circle cx="60" cy="35" r="4.5" fill="#22222A"/>
+      <path d="M 38,48 C 43,54 57,54 62,48" fill="none" stroke="#22222A" stroke-width="5" stroke-linecap="round"/>
+      <rect x="32" y="67" width="36" height="10" fill="#FFD500" stroke="#22222A" stroke-width="6"/>
+    </svg>
+    <div class="profile-cog-badge">
+      <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+    </div>
+  `;
+    const slideMenu = document.createElement("div");
+    slideMenu.className = "profile-sliding-menu";
+    const subSettingsBtn = document.createElement("button");
+    subSettingsBtn.type = "button";
+    subSettingsBtn.className = "profile-menu-opt-btn settings";
+    subSettingsBtn.title = "Open Settings Modal";
+    subSettingsBtn.innerHTML = `
+    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+  `;
+    subSettingsBtn.onclick = (e) => {
+      e.stopPropagation();
+      toggleSettings();
+    };
+    slideMenu.appendChild(subSettingsBtn);
+    const subLogoutBtn = document.createElement("button");
+    subLogoutBtn.type = "button";
+    subLogoutBtn.className = "profile-menu-opt-btn logout";
+    subLogoutBtn.title = "Sign Out";
+    subLogoutBtn.innerHTML = `
+    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
+  `;
+    subLogoutBtn.onclick = (e) => {
+      e.stopPropagation();
+      signOut2();
+    };
+    slideMenu.appendChild(subLogoutBtn);
+    profileBtn.onclick = (e) => {
+      e.stopPropagation();
+      menuContainer.classList.toggle("is-open");
+    };
+    document.addEventListener("mousedown", (e) => {
+      if (!menuContainer.contains(e.target)) {
+        menuContainer.classList.remove("is-open");
+      }
+    });
+    menuContainer.appendChild(profileBtn);
+    menuContainer.appendChild(slideMenu);
+    container.appendChild(menuContainer);
+    if (state2.isSettingsOpen) {
+      renderSettingsModal(container, state2);
+    }
+    parentEl.appendChild(container);
+  }
+  function renderSettingsModal(container, state2) {
+    let backdrop = container.querySelector(".settings-overlay-backdrop");
+    if (!backdrop) {
+      backdrop = document.createElement("div");
+      backdrop.className = "settings-overlay-backdrop";
+      backdrop.onclick = (e) => {
+        if (e.target === backdrop) {
+          playSound("click");
+          closeSettings();
+        }
+      };
+      container.appendChild(backdrop);
+    }
+    backdrop.innerHTML = "";
+    const totalBricksCount = mockInventory.reduce((acc, curr) => acc + curr.quantity, 0);
+    let builderRank = "Apprentice Builder";
+    if (totalBricksCount > 20) {
+      builderRank = "Master Designer";
+    } else if (totalBricksCount > 10) {
+      builderRank = "Senior Builder";
+    }
+    const card = document.createElement("div");
+    card.className = "brick-card settings-modal-card";
+    card.innerHTML = `
+    <div class="panel-header">
+      <span class="panel-title font-display" style="color:var(--white)">Workspace &amp; Profile Settings</span>
+      <button type="button" class="panel-btn close" id="modal-settings-close">
+        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+      </button>
+    </div>
+    <div class="panel-body-content" style="padding: 20px">
+      <h4 class="settings-section-title">User Profile Details</h4>
+      
+      <div class="profile-badge-row font-body">
+        <span class="profile-badge-label">Builder Rank</span>
+        <span class="profile-rank-tag font-display">${builderRank}</span>
+      </div>
+
+      <div class="profile-field-group font-body" style="margin-bottom: 10px">
+        <label class="profile-field-label">Display Username</label>
+        <input type="text" class="profile-field-input" id="profile-username-input" value="${state2.user?.display_name || "MasterBuilder"}" />
+      </div>
+
+      <div class="profile-field-group font-body" style="margin-bottom: 16px">
+        <label class="profile-field-label">User Email Address</label>
+        <div class="profile-field-input" style="background: rgba(34,34,42,0.06); color: var(--grey-600); border-style: solid; font-weight: bold; pointer-events: none; user-select: text;">
+          ${state2.user?.email || "builder@lego.com"}
+        </div>
+      </div>
+
+      <h4 class="settings-section-title">Workspace Color Themes</h4>
+      <div class="theme-studs-picker-container">
+        <button type="button" class="theme-stud-selector ${state2.theme === "classic" ? "active" : ""}" data-theme-opt="classic" style="--stud-color: #FFD500" title="Classic Yellow"></button>
+        <button type="button" class="theme-stud-selector ${state2.theme === "space-explorer" ? "active" : ""}" data-theme-opt="space-explorer" style="--stud-color: #38BDF8" title="Space Explorer Blue"></button>
+        <button type="button" class="theme-stud-selector ${state2.theme === "neon-cyber" ? "active" : ""}" data-theme-opt="neon-cyber" style="--stud-color: #FF007F" title="Neon Cyber Pink"></button>
+        <button type="button" class="theme-stud-selector ${state2.theme === "forest-ranger" ? "active" : ""}" data-theme-opt="forest-ranger" style="--stud-color: #3D7A44" title="Forest Ranger Moss"></button>
+        <button type="button" class="theme-stud-selector ${state2.theme === "royal-knight" ? "active" : ""}" data-theme-opt="royal-knight" style="--stud-color: #E9C46A" title="Royal Knight Gold"></button>
+      </div>
+
+      <h4 class="settings-section-title">Baseplate Stud Patterns</h4>
+      <div class="stud-preview-grid">
+        <div class="stud-preview-box ${state2.studStyle === "circular" ? "active" : ""}" data-stud-opt="circular">
+          <div class="preview-pattern"></div>
+          <span class="preview-label font-display">Circular</span>
+        </div>
+        <div class="stud-preview-box ${state2.studStyle === "rounded-square" ? "active" : ""}" data-stud-opt="rounded-square">
+          <div class="preview-pattern"></div>
+          <span class="preview-label font-display">Square</span>
+        </div>
+        <div class="stud-preview-box ${state2.studStyle === "dense-lego" ? "active" : ""}" data-stud-opt="dense-lego">
+          <div class="preview-pattern"></div>
+          <span class="preview-label font-display">Dense LEGO</span>
+        </div>
+      </div>
+
+      <h4 class="settings-section-title">Controls Configuration</h4>
+      <div class="settings-options-grid">
+        <button type="button" class="option-btn ${state2.snapEnabled ? "active" : ""}" id="modal-snap-toggle-btn">
+          ${state2.snapEnabled ? "Grid Snapping: ON" : "Grid Snapping: OFF"}
+        </button>
+        <button type="button" class="option-btn ${state2.soundEnabled ? "active" : ""}" id="modal-sound-toggle-btn">
+          ${state2.soundEnabled ? "Sound Effects: ON" : "Sound Effects: OFF"}
+        </button>
+      </div>
+
+      <div class="settings-footnote font-display" style="font-size:0.75rem; color:var(--grey-600); text-align:center; margin-top:24px; opacity:0.65; font-weight:500;">
+        Cloud Technologies for AI (CAI2C09), BRICKED-UP
+      </div>
+    </div>
+  `;
+    card.querySelector("#modal-settings-close").onclick = () => {
+      playSound("click");
+      closeSettings();
+    };
+    const usernameInput = card.querySelector("#profile-username-input");
+    usernameInput.onchange = (e) => {
+      const newName = e.target.value.trim();
+      if (newName) {
+        playSound("click");
+        const updatedUser = { ...state2.user, display_name: newName };
+        setUser(updatedUser, state2.idToken);
+      }
+    };
+    card.querySelector("#modal-snap-toggle-btn").onclick = () => {
+      playSound("click");
+      toggleSnapEnabled();
+    };
+    card.querySelector("#modal-sound-toggle-btn").onclick = () => {
+      playSound("click");
+      toggleSoundEnabled();
+    };
+    card.querySelectorAll("[data-theme-opt]").forEach((btn) => {
+      btn.onclick = () => {
+        playSound("click");
+        setTheme(btn.getAttribute("data-theme-opt"));
+      };
+    });
+    card.querySelectorAll("[data-stud-opt]").forEach((btn) => {
+      btn.onclick = () => {
+        playSound("click");
+        setStudStyle(btn.getAttribute("data-stud-opt"));
+      };
+    });
+    backdrop.appendChild(card);
+  }
+  function getBrickColorStyles2(colorName) {
+    const colors = {
+      "Red": { bg: "#D01012", text: "#FFFFFF" },
+      "Blue": { bg: "#0057A6", text: "#FFFFFF" },
+      "Yellow": { bg: "#FFD500", text: "#22222A" },
+      "White": { bg: "#FFFFFF", text: "#22222A" },
+      "Grey": { bg: "#5B5B66", text: "#FFFFFF" },
+      "Green": { bg: "#1E7A34", text: "#FFFFFF" }
+    };
+    return colors[colorName] || { bg: "#E2E8F0", text: "#22222A" };
+  }
+  function renderStandalonePart(body, item, panelId) {
+    body.innerHTML = "";
+    const spinner = document.createElement("div");
+    spinner.className = "brick-spinner-container";
+    spinner.style.height = "100%";
+    spinner.style.display = "flex";
+    spinner.style.flexDirection = "column";
+    spinner.style.alignItems = "center";
+    spinner.style.justifyContent = "center";
+    spinner.innerHTML = `
+    <div class="brick-stud-spinner">
+      <div class="stud-spinner-top"></div>
+      <div class="stud-spinner-body"></div>
+    </div>
+  `;
+    body.appendChild(spinner);
+    getInventory().then((items) => {
+      const freshItem = items.find((i) => i.inventory_id === item.inventory_id);
+      if (!freshItem) {
+        closePanel(panelId);
+        return;
+      }
+      body.innerHTML = "";
+      const parsed = parsePartNameAndColor(freshItem.part_name);
+      const colorStyles = getBrickColorStyles2(parsed.color);
+      const container = document.createElement("div");
+      container.style.display = "flex";
+      container.style.flexDirection = "column";
+      container.style.alignItems = "center";
+      container.style.justifyContent = "center";
+      container.style.padding = "16px";
+      container.style.height = "100%";
+      container.style.boxSizing = "border-box";
+      container.innerHTML = `
+      <div class="part-img-holder" style="width: 100px; height: 100px; display:flex; align-items:center; justify-content:center; background: rgba(255,255,255,0.75); border: 2.5px solid var(--ink-900); border-radius: var(--radius-card); box-shadow: inset 0 2px 5px rgba(0,0,0,0.1); margin-bottom: 8px; box-sizing: border-box; padding: 8px;">
+        <img src="${freshItem.reference_image_url}" alt="${parsed.name}" style="max-width:90%; max-height:90%; object-fit:contain;" />
+      </div>
+      <div style="text-align: center; width: 100%;">
+        <div style="display:flex; justify-content:center; gap:6px; margin-bottom:6px">
+          <span class="part-badge-cat font-display" style="background-color: var(--cream-200); border: 1.5px solid var(--ink-900); border-radius: 4px; padding: 2px 6px; font-size: 0.65rem; font-weight: 800; text-transform: uppercase;">${freshItem.category}</span>
+          <span class="part-badge-color font-display" style="background-color: ${colorStyles.bg}; color: ${colorStyles.text}; border: 1.5px solid var(--ink-900); border-radius: 4px; padding: 2px 6px; font-size: 0.65rem; font-weight: 800; text-transform: uppercase;">${parsed.color}</span>
+        </div>
+        <h4 class="font-display" style="font-size: 0.95rem; margin: 4px 0 2px 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--ink-900);" title="${parsed.name}">${parsed.name}</h4>
+        <p style="font-family: var(--font-body); font-size: 0.8rem; color: var(--grey-600); margin: 0 0 8px 0;">Part ID: <strong>${freshItem.part_id}</strong></p>
+        
+        <div class="part-card-footer-actions" style="justify-content: center; gap: 12px; display: flex; align-items: center; margin-top: 4px;">
+          <div class="qty-picker">
+            <button type="button" class="qty-picker-btn font-display decrease-btn"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="5" y1="12" x2="19" y2="12"></line></svg></button>
+            <input type="number" class="qty-value font-display qty-input" value="${freshItem.quantity}" style="width: 28px; text-align: center; border: none; background: transparent; padding: 0; outline: none; font-weight: 800; font-size: 0.8rem; -moz-appearance: textfield; color: var(--ink-900);" />
+            <button type="button" class="qty-picker-btn font-display increase-btn"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg></button>
+          </div>
+          <button type="button" class="part-delete-btn delete-btn" title="Remove item" style="padding: 6px; border: 2px solid var(--ink-900); background-color: var(--white); border-radius: 6px; box-shadow: 0 2px 0 var(--ink-900); display: flex; align-items: center; justify-content: center; cursor: pointer; color: var(--grey-600);">
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
+          </button>
+        </div>
+      </div>
+    `;
+      const decreaseBtn = container.querySelector(".decrease-btn");
+      const increaseBtn = container.querySelector(".increase-btn");
+      const deleteBtn = container.querySelector(".delete-btn");
+      const qtyInput = container.querySelector(".qty-input");
+      const updateQty = async (newQty) => {
+        try {
+          if (newQty <= 0) {
+            if (confirm("Are you sure you want to remove this part from your inventory?")) {
+              await deleteInventoryItem(freshItem.inventory_id);
+              closePanel(panelId);
+              triggerInventoryUpdate();
+            } else {
+              qtyInput.value = freshItem.quantity;
+            }
+          } else {
+            await updateInventoryItem(freshItem.inventory_id, { quantity: newQty });
+            triggerInventoryUpdate();
+          }
+        } catch (err) {
+          alert("Failed to update brick count");
+        }
+      };
+      decreaseBtn.onclick = () => updateQty(freshItem.quantity - 1);
+      increaseBtn.onclick = () => updateQty(freshItem.quantity + 1);
+      qtyInput.onchange = (e) => {
+        let val = parseInt(e.target.value);
+        if (isNaN(val) || val < 0) val = 0;
+        updateQty(val);
+      };
+      deleteBtn.onclick = async (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (confirm("Are you sure you want to remove this part from your inventory?")) {
+          try {
+            await deleteInventoryItem(freshItem.inventory_id);
+            closePanel(panelId);
+            triggerInventoryUpdate();
+          } catch (err) {
+            alert("Failed to remove piece");
+          }
+        }
+      };
+      body.appendChild(container);
+    }).catch((err) => {
+      body.innerHTML = `<div style="padding:16px; text-align:center; color:var(--brick-red)" class="font-display">Error loading part details.</div>`;
+    });
+  }
+  function renderStandaloneBuild(body, build) {
+    body.style.height = "100%";
+    body.style.display = "flex";
+    body.style.flexDirection = "column";
+    body.style.boxSizing = "border-box";
+    const spinnerContainer = document.createElement("div");
+    spinnerContainer.className = "brick-spinner-container";
+    spinnerContainer.style.height = "100%";
+    spinnerContainer.style.display = "flex";
+    spinnerContainer.style.flexDirection = "column";
+    spinnerContainer.style.alignItems = "center";
+    spinnerContainer.style.justifyContent = "center";
+    spinnerContainer.innerHTML = `
+    <div class="brick-stud-spinner">
+      <div class="stud-spinner-top"></div>
+      <div class="stud-spinner-body"></div>
+    </div>
+    <p class="brick-spinner-message font-display">Retrieving schematic checklist...</p>
+  `;
+    body.appendChild(spinnerContainer);
+    getBuildDetail(build.build_id).then((detail) => {
+      body.innerHTML = "";
+      const detailContent = document.createElement("div");
+      detailContent.className = "detail-content-scroll";
+      detailContent.style.height = "100%";
+      detailContent.style.overflowY = "auto";
+      detailContent.style.padding = "12px";
+      detailContent.style.boxSizing = "border-box";
+      const hero = document.createElement("img");
+      hero.className = "detail-hero";
+      hero.src = detail.hero_image_url;
+      hero.alt = detail.build_name;
+      hero.style.width = "100%";
+      hero.style.height = "140px";
+      hero.style.objectFit = "cover";
+      hero.style.borderRadius = "var(--radius-card)";
+      hero.style.border = "2.5px solid var(--ink-900)";
+      hero.style.boxSizing = "border-box";
+      detailContent.appendChild(hero);
+      const title = document.createElement("h4");
+      title.className = "detail-title font-display";
+      title.style.margin = "10px 0 4px 0";
+      title.style.fontSize = "1.1rem";
+      title.style.color = "var(--ink-900)";
+      title.textContent = detail.build_name;
+      detailContent.appendChild(title);
+      const desc = document.createElement("p");
+      desc.className = "detail-desc";
+      desc.style.fontSize = "0.82rem";
+      desc.style.color = "var(--grey-600)";
+      desc.style.margin = "0 0 12px 0";
+      desc.textContent = detail.description;
+      detailContent.appendChild(desc);
+      const listTitle = document.createElement("h5");
+      listTitle.className = "parts-title font-display";
+      listTitle.style.fontSize = "0.9rem";
+      listTitle.style.margin = "0 0 8px 0";
+      listTitle.textContent = "Required Parts";
+      detailContent.appendChild(listTitle);
+      const partsList = document.createElement("div");
+      partsList.className = "parts-list";
+      detail.parts.forEach((part) => {
+        const isComplete = part.quantity_owned >= part.quantity_required;
+        const missingCount = part.quantity_required - part.quantity_owned;
+        const partRow = document.createElement("div");
+        partRow.className = `part-req-row ${isComplete ? "complete" : ""}`;
+        partRow.innerHTML = `
+        <img src="${part.reference_image_url}" alt="${part.part_name}" class="part-req-img" />
+        <div class="part-req-info font-body" style="flex:1; display:flex; align-items:center; justify-content:space-between">
+          <div style="flex:1">
+            <span class="part-req-name font-display" style="display:block; font-size:0.8rem; color: var(--ink-900);">${part.part_name}</span>
+            <span style="font-size:0.72rem;color:var(--grey-600)">Owned: ${part.quantity_owned} / Required: ${part.quantity_required}</span>
+          </div>
+          <div class="part-req-qty">
+            ${isComplete ? `<span style="color:var(--brick-green); display:flex; align-items:center;"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg></span>` : `<span class="status-indicator warning font-display" style="background-color:rgba(255,213,0,0.15);border:1.5px solid var(--ink-900);border-radius:6px;font-size:0.65rem;font-weight:800;color:var(--ink-900);padding:1px 5px;display:flex;align-items:center;gap:3px">
+                  <span>+${missingCount}</span>
+                 </span>`}
+          </div>
+        </div>
+      `;
+        partsList.appendChild(partRow);
+      });
+      detailContent.appendChild(partsList);
+      const stepsTitle = document.createElement("h5");
+      stepsTitle.className = "parts-title font-display";
+      stepsTitle.style.fontSize = "0.9rem";
+      stepsTitle.style.margin = "16px 0 8px 0";
+      stepsTitle.style.borderTop = "2px dashed var(--ink-900)";
+      stepsTitle.style.paddingTop = "12px";
+      stepsTitle.textContent = "Assembly Instructions";
+      detailContent.appendChild(stepsTitle);
+      const stepsList = document.createElement("div");
+      stepsList.className = "steps-checklist";
+      stepsList.style.display = "flex";
+      stepsList.style.flexDirection = "column";
+      stepsList.style.gap = "8px";
+      const steps = detail.steps || [];
+      steps.forEach((step, idx) => {
+        const stepRow = document.createElement("label");
+        stepRow.className = "step-row font-body";
+        stepRow.style.display = "flex";
+        stepRow.style.alignItems = "flex-start";
+        stepRow.style.gap = "8px";
+        stepRow.style.cursor = "pointer";
+        stepRow.style.fontSize = "0.8rem";
+        stepRow.style.color = "var(--ink-900)";
+        stepRow.innerHTML = `
+        <input type="checkbox" class="step-checkbox" style="margin-top: 2px; cursor: pointer;" />
+        <span class="step-text" style="transition: opacity 120ms ease, text-decoration 120ms ease;">${step}</span>
+      `;
+        const cb = stepRow.querySelector(".step-checkbox");
+        const txt = stepRow.querySelector(".step-text");
+        cb.onchange = () => {
+          if (cb.checked) {
+            txt.style.textDecoration = "line-through";
+            txt.style.opacity = "0.5";
+          } else {
+            txt.style.textDecoration = "none";
+            txt.style.opacity = "1";
+          }
+        };
+        stepsList.appendChild(stepRow);
+      });
+      detailContent.appendChild(stepsList);
+      body.appendChild(detailContent);
+    }).catch((err) => {
+      body.innerHTML = `<div style="padding:16px; text-align:center; color:var(--brick-red)" class="font-display">Error loading blueprint specs.</div>`;
+    });
+  }
+
+  // js/app.js
+  var prevUser = null;
+  var prevRefreshKey = 0;
+  async function init() {
+    const root = document.getElementById("app");
+    if (window.location.hash === "#logo") {
+      root.innerHTML = `
+      <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; width: 100vw; height: 100vh; background-color: #FFFFFF; font-family: var(--font-display);">
+        <img src="favicon.png" style="width: 512px; height: 512px; border: 6px solid #22222A; border-radius: 28px; box-shadow: 0 12px 0 #22222A; animation: logo-bounce-in 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);" alt="Favicon Logo" />
+        <h2 style="margin-top: 24px; color: #22222A; font-size: 2.2rem; font-weight: 900; letter-spacing: 0.5px;">BRICKED-UP Logo</h2>
+        <a href="#" style="margin-top: 16px; font-family: var(--font-body); font-size: 0.95rem; font-weight: bold; color: var(--brick-blue); text-decoration: none; border-bottom: 2px dashed var(--brick-blue); padding-bottom: 2px;" onclick="window.location.hash=''; window.location.reload();">\u2190 Back to Workspace</a>
+        <style>
+          @keyframes logo-bounce-in {
+            0% { transform: scale(0.6); opacity: 0; }
+            100% { transform: scale(1); opacity: 1; }
+          }
+        </style>
+      </div>
+    `;
+      return;
+    }
+    window.addEventListener("hashchange", () => {
+      window.location.reload();
+    });
+    subscribe((state2, isPositionOnly) => {
+      if (state2.isLoading) {
+        root.innerHTML = `
+        <div style="display: flex; align-items: center; justify-content: center; width: 100vw; height: 100vh; background-color: var(--cream-100);">
+          <div class="brick-spinner-container">
+            <div class="brick-stud-spinner large">
+              <div class="stud-spinner-top"></div>
+              <div class="stud-spinner-body"></div>
+            </div>
+            <p class="brick-spinner-message font-display">Building Workspace...</p>
+          </div>
+        </div>
+      `;
+        return;
+      }
+      if (!state2.user) {
+        if (prevUser !== null) {
+          forceReloadInventory();
+          forceReloadBuilds();
+          closeBuildDetails();
+          prevUser = null;
+        }
+        renderAuth(root);
+        return;
+      }
+      prevUser = state2.user;
+      if (state2.inventoryRefreshKey !== prevRefreshKey) {
+        prevRefreshKey = state2.inventoryRefreshKey;
+        forceReloadInventory();
+        forceReloadBuilds();
+      }
+      renderWorkspace(root, state2, isPositionOnly);
+    });
+    setIsLoading(true);
+    try {
+      const cachedUser = await getCurrentUser();
+      if (cachedUser) {
+        setUser(cachedUser, "jwt_cached_session");
+      } else {
+        setUser(null);
+      }
+    } catch (err) {
+      console.error("Session restoration failed:", err);
+      setUser(null);
+    } finally {
+      setIsLoading(false);
+    }
+    window.addEventListener("resize", () => {
+      if (getState().user) {
+        notify(true);
+      }
+    });
+    window.addEventListener("keydown", (event) => {
+      if (event.ctrlKey && event.shiftKey && event.key.toLowerCase() === "h") {
+        event.preventDefault();
+        toggleHctPattern();
+      }
+    });
+  }
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", init);
+  } else {
+    init();
+  }
+})();

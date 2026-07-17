@@ -1,0 +1,89 @@
+/* Workspace Canvas & Grid Patterns */
+
+.workspace-container {
+  position: relative;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  background-color: var(--cream-100);
+  transition: background-color var(--hover-ease);
+}
+
+.workspace-baseplate {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.workspace-dots {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+/* Baseplate Studs: Circular (Classic LEGO Baseplate) - LARGER 3px dots as in frontend-v2 */
+[data-studs="circular"] .workspace-dots {
+  background-image: radial-gradient(var(--dot-grid) 3px, transparent 3px);
+  background-size: var(--dot-spacing) var(--dot-spacing);
+}
+
+/* Baseplate Studs: Rounded Square */
+[data-studs="rounded-square"] .workspace-dots {
+  background-size: var(--dot-spacing) var(--dot-spacing);
+}
+
+/* Theme + Stud SVGs overrides */
+[data-theme="classic"][data-studs="rounded-square"] .workspace-dots {
+  background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32"><rect x="13" y="13" width="6" height="6" rx="2" fill="%23DCD4C0"/></svg>');
+}
+
+[data-theme="space-explorer"][data-studs="rounded-square"] .workspace-dots {
+  background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32"><rect x="13" y="13" width="6" height="6" rx="2" fill="%23334155"/></svg>');
+}
+
+[data-theme="neon-cyber"][data-studs="rounded-square"] .workspace-dots {
+  background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32"><rect x="13" y="13" width="6" height="6" rx="2" fill="%234A004A"/></svg>');
+}
+
+/* Baseplate Studs: Dense LEGO (Larger and closer studs) */
+[data-studs="dense-lego"] .workspace-dots {
+  background-image: radial-gradient(var(--dot-grid) 5.5px, transparent 5.5px);
+  background-size: 16px 16px;
+}
+
+[data-theme="forest-ranger"][data-studs="rounded-square"] .workspace-dots {
+  background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32"><rect x="13" y="13" width="6" height="6" rx="2" fill="%23DFD5BA"/></svg>');
+}
+
+[data-theme="royal-knight"][data-studs="rounded-square"] .workspace-dots {
+  background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32"><rect x="13" y="13" width="6" height="6" rx="2" fill="%23C7C9C1"/></svg>');
+}
+
+/* Glowing Scanner line overlay on uploaded image wrapper */
+.scanner-scan-line {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 10px;
+  background-image: repeating-linear-gradient(90deg, 
+    var(--brick-red) 0px, 
+    var(--brick-red) 12px, 
+    transparent 12px, 
+    transparent 15px
+  );
+  box-shadow: 0 0 10px var(--brick-red), 0 0 20px var(--brick-red);
+  z-index: 10;
+  pointer-events: none;
+  animation: scan-sweep 3s ease-in-out infinite; /* Slightly slower for visual clarity */
+}
+
+@keyframes scan-sweep {
+  0% { top: 0%; }
+  50% { top: 100%; }
+  100% { top: 0%; }
+}

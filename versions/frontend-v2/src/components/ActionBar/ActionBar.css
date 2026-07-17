@@ -1,0 +1,47 @@
+.action-bar-container {
+  display: flex;
+}
+
+.action-bar {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 12px 24px;
+  background-color: var(--ink-900);
+  border-radius: var(--radius-pill);
+  box-shadow: 0 8px 24px rgba(34, 34, 42, 0.4);
+  cursor: grab;
+  transition: transform 0.2s ease, flex-direction 0.2s ease;
+}
+
+.action-bar-container.is-dragging .action-bar {
+  cursor: grabbing;
+  transform: scale(1.05);
+}
+
+.action-bar.is-vertical {
+  flex-direction: column;
+  padding: 24px 12px;
+}
+
+.action-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  color: var(--white);
+  background-color: transparent;
+  transition: background-color 0.2s ease, transform 0.1s ease;
+}
+
+.action-btn:hover {
+  background-color: rgba(255, 255, 255, 0.15);
+}
+
+.action-btn:active {
+  transform: scale(0.95);
+}

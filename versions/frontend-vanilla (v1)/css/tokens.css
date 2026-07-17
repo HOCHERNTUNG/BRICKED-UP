@@ -1,0 +1,130 @@
+/* CSS Design Tokens for BRICKED-UP (Vanilla) */
+
+:root {
+  /* Classic Brick Theme (Default) */
+  --ink-900: #22222A;      /* Top bar, panel borders, primary text, docked action bar */
+  --cream-100: #F6F1E4;    /* Workspace background */
+  --dot-grid: #DCD4C0;     /* Stud pattern background */
+  
+  --brick-red: #D01012;    /* Scanner header, critical actions */
+  --brick-yellow: #FFD500; /* Logo highlight, selected tabs, alerts */
+  --brick-blue: #0057A6;   /* Inventory header, info badges */
+  --brick-green: #1E7A34;  /* Add to bin confirm, progress indicator */
+  --brick-purple: #5E1E9A; /* Build Ideas accent, tags */
+  
+  --grey-600: #5B5B66;     /* Secondary text, labels */
+  --white: #FFFFFF;
+  --bg-card: #FFFFFF;
+
+  /* Typography */
+  --font-display: "Baloo 2", "Nunito", system-ui, sans-serif;
+  --font-body: "Inter", system-ui, sans-serif;
+
+  /* Grid & Spacing */
+  --grid-unit: 8px;
+  --snap-unit: 32px;
+  --dot-spacing: 32px;
+
+  /* Radii */
+  --radius-panel: 22px;
+  --radius-card: 14px;
+  --radius-pill: 999px;
+
+  /* Motion */
+  --snap-ease: 180ms cubic-bezier(0.22, 1, 0.36, 1);
+  --hover-ease: 150ms ease-out;
+
+  /* Border Styles */
+  --border-width: 4px;
+  --panel-border: var(--border-width) solid var(--ink-900);
+  --panel-shadow: 0 8px 0px rgba(34, 34, 42, 0.1), 0 12px 24px rgba(34, 34, 42, 0.15);
+  --card-shadow: 0 4px 0px rgba(34, 34, 42, 0.05), 0 4px 10px rgba(34, 34, 42, 0.08);
+}
+
+/* Theme: Space Explorer */
+[data-theme="space-explorer"] {
+  --ink-900: #E2E8F0;      /* Light border/text on dark backgrounds */
+  --cream-100: #0F172A;    /* Deep space background */
+  --dot-grid: #334155;     /* Darker studs */
+  --white: #F8FAFC;        /* Workspace white overrides */
+  --bg-card: #1E293B;      /* Card background */
+  --grey-600: #94A3B8;     /* Muted text */
+
+  --brick-red: #F97316;    /* Neon orange scanner */
+  --brick-yellow: #FBBF24; /* Golden glow */
+  --brick-blue: #38BDF8;   /* Cosmic cyan inventory */
+  --brick-green: #4ADE80;  /* Radioactive green success */
+  --brick-purple: #C084FC; /* Purple nebula build ideas */
+  
+  --panel-border: var(--border-width) solid #334155;
+  --panel-shadow: 0 8px 0px rgba(0, 0, 0, 0.3), 0 12px 24px rgba(0, 0, 0, 0.4);
+  --card-shadow: 0 4px 0px rgba(0, 0, 0, 0.2), 0 4px 10px rgba(0, 0, 0, 0.3);
+}
+
+/* Theme: Neon Cyber */
+[data-theme="neon-cyber"] {
+  --ink-900: #FF007F;      /* Glowing hot pink text/border */
+  --cream-100: #120018;    /* Dark violet cybergrid */
+  --dot-grid: #4A004A;     /* Magenta studs */
+  --white: #FFFFFF;
+  --bg-card: #20002A;
+  --grey-600: #B880B8;
+
+  --brick-red: #FF007F;    /* Hot pink */
+  --brick-yellow: #FFFF00; /* Acid yellow */
+  --brick-blue: #00FFFF;   /* Cyber cyan */
+  --brick-green: #39FF14;  /* Matrix green */
+  --brick-purple: #BD00FF; /* Synthwave purple */
+  
+  --panel-border: var(--border-width) solid var(--ink-900);
+  --panel-shadow: 0 0 15px rgba(255, 0, 127, 0.4);
+  --card-shadow: 0 0 10px rgba(0, 255, 255, 0.2);
+}
+
+/* Theme: Forest Ranger */
+[data-theme="forest-ranger"] {
+  --ink-900: #2C3E29;      /* Dark moss green */
+  --cream-100: #F1EBD9;    /* Parchment baseplate */
+  --dot-grid: #DFD5BA;     /* Khaki/tan studs */
+  --white: #FFFFFF;
+  --bg-card: #FFFFFF;
+  --grey-600: #606D5C;     /* Slate green text */
+
+  --brick-red: #A03A2E;    /* Terracotta red */
+  --brick-yellow: #DCA134; /* Ochre/mustard yellow */
+  --brick-blue: #3E6F8E;   /* Slate blue */
+  --brick-green: #3D7A44;  /* Pine forest green */
+  --brick-purple: #754B7C; /* Muted wild plum */
+  
+  --panel-border: var(--border-width) solid var(--ink-900);
+  --panel-shadow: 0 8px 0px rgba(44, 62, 41, 0.12), 0 12px 24px rgba(44, 62, 41, 0.15);
+  --card-shadow: 0 4px 0px rgba(44, 62, 41, 0.05), 0 4px 10px rgba(44, 62, 41, 0.08);
+}
+
+/* Theme: Royal Knight */
+[data-theme="royal-knight"] {
+  --ink-900: #1C2541;      /* Deep iron helmet navy */
+  --cream-100: #E0E2DB;    /* Castle stone grey */
+  --dot-grid: #C7C9C1;     /* Light stone studs */
+  --white: #FFFFFF;
+  --bg-card: #F4F6F0;      /* Silvery grey card backgrounds */
+  --grey-600: #5C677D;
+
+  --brick-red: #9E2A2B;    /* Shield crest crimson */
+  --brick-yellow: #E9C46A; /* Royal gold yellow */
+  --brick-blue: #0F4C81;   /* Knight banner royal blue */
+  --brick-green: #2A9D8F;  /* Medieval emerald green */
+  --brick-purple: #560BAD; /* Emperor royal purple */
+  
+  --panel-border: var(--border-width) solid var(--ink-900);
+  --panel-shadow: 0 8px 0px rgba(28, 37, 65, 0.16), 0 12px 24px rgba(28, 37, 65, 0.2);
+  --card-shadow: 0 4px 0px rgba(28, 37, 65, 0.08), 0 4px 10px rgba(28, 37, 65, 0.12);
+}
+
+/* Reduced Motion Override */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --snap-ease: 0s !important;
+    --hover-ease: 0s !important;
+  }
+}
