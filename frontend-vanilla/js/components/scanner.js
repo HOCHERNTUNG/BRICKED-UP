@@ -3,6 +3,7 @@ import { addInventoryItem } from '../api/inventory.js';
 import { triggerInventoryUpdate } from '../hooks/state.js';
 
 import { playSound } from '../hooks/sound.js';
+import { partImageAttrs } from '../api/partImage.js';
 
 let scanState = 'idle'; // idle | uploading | scanning | results | error
 let candidates = [];
@@ -274,7 +275,7 @@ function renderResults(parent) {
       <div class="brick-card-body">
         <div class="candidate-card-layout">
           <div class="candidate-image-wrapper">
-            <img src="${cand.part.reference_image_url}" alt="${cand.part.part_name}" class="candidate-part-img" />
+            <img ${partImageAttrs(cand.part, cand.part.part_name)} class="candidate-part-img" />
           </div>
           <div class="candidate-info-wrapper">
             <div class="candidate-header-row">

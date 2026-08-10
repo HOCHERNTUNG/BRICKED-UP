@@ -22,8 +22,11 @@ export async function signUp({ email, password, displayName }) {
   if (!email || !password || !displayName) {
     throw new Error('Please fill in all details');
   }
-  if (password.length < 6) {
-    throw new Error('Password must be at least 6 characters');
+  // Must stay in step with the Cognito user pool's password policy
+  // (minimum 8, at least one lowercase letter and one digit), otherwise the
+  // client accepts a password the server then rejects.
+  if (password.length < 8) {
+    throw new Error('Password must be at least 8 characters');
   }
 
   const userSub = 'usr_' + Math.random().toString(36).substr(2, 9);

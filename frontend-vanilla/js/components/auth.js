@@ -128,8 +128,17 @@ export function renderAuth(parentEl) {
         return;
       }
 
-      if (passwordValue.length < 6) {
-        authErrorMsg = 'Password must be at least 6 blocks long.';
+      // Mirrors the Cognito password policy: 8+ characters, with at least
+      // one lowercase letter and one digit. Checking it here means the user
+      // gets a friendly message instead of a raw server rejection.
+      if (passwordValue.length < 8) {
+        authErrorMsg = 'Password must be at least 8 blocks long.';
+        renderAuth(parentEl);
+        return;
+      }
+
+      if (!/[a-z]/.test(passwordValue) || !/[0-9]/.test(passwordValue)) {
+        authErrorMsg = 'Password needs at least one letter and one number.';
         renderAuth(parentEl);
         return;
       }

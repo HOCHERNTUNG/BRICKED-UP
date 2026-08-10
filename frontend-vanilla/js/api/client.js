@@ -1,9 +1,10 @@
 // js/api/client.js
 
-// By default, the vanilla project runs in mocked mode.
-// Swapping is done by updating these variables.
-export const IS_MOCKED = true;
-export const API_BASE_URL = '';
+// Set IS_MOCKED = true to run the UI standalone against js/api/fixtures.js
+// with no backend (how Deliverable 1 was demonstrated).
+// Set it to false to talk to the deployed AWS backend.
+export const IS_MOCKED = false;
+export const API_BASE_URL = 'https://w45s12yx64.execute-api.ap-southeast-1.amazonaws.com/prod';
 
 export let activeToken = null;
 

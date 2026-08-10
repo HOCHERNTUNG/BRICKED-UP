@@ -1,5 +1,6 @@
 import { getInventory, updateInventoryItem, deleteInventoryItem } from '../api/inventory.js';
 import { triggerInventoryUpdate, spawnStandalonePanel, parsePartNameAndColor } from '../hooks/state.js';
+import { partImageAttrs } from '../api/partImage.js';
 
 function getBrickColorStyles(colorName) {
   const colors = {
@@ -229,7 +230,7 @@ function renderListBody(container) {
     card.innerHTML = `
       <div class="part-card-inner">
         <div class="part-img-holder">
-          <img src="${item.reference_image_url}" alt="${parsed.name}" />
+          <img ${partImageAttrs(item, parsed.name)} />
         </div>
         <div class="part-card-content">
           <div class="part-meta-row font-display" style="display:flex; gap:5px; margin-bottom:4px">

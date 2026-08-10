@@ -1,4 +1,5 @@
 import { addInventoryItem } from '../api/inventory.js';
+import { IS_MOCKED } from '../api/client.js';
 import { triggerInventoryUpdate, closePanel } from '../hooks/state.js';
 import { MOCK_PARTS, getBrickSvg } from '../api/fixtures.js';
 
@@ -88,29 +89,44 @@ export function renderAddPartPanel(bodyEl, panelId) {
 
     const partName = `${shapeName} (${colorName})`;
 
-    // Check if part exists in MOCK_PARTS, otherwise register it
-    let existingPart = MOCK_PARTS.find(p => p.type === shapeType && p.color === colorHex);
-    let partId;
-    if (existingPart) {
-      partId = existingPart.part_id;
-    } else {
-      partId = Math.max(...MOCK_PARTS.map(p => p.part_id), 0) + 1;
-      MOCK_PARTS.push({
-        part_id: partId,
-        part_name: partName,
-        category: shapeCategory,
-        color: colorHex,
-        type: shapeType,
-        reference_image_url: getBrickSvg(colorHex, shapeType)
-      });
-    }
-
     try {
-      await addInventoryItem({
-        part_id: partId,
-        quantity: qty,
-        source_image_key: null
-      });
+      if (IS_MOCKED) {
+        // Standalone mode: resolve or register the part in the local fixture
+        // array, since there is no server to do it.
+        let existingPart = MOCK_PARTS.find(p => p.type === shapeType && p.color === colorHex);
+        let partId;
+        if (existingPart) {
+          partId = existingPart.part_id;
+        } else {
+          partId = Math.max(...MOCK_PARTS.map(p => p.part_id), 0) + 1;
+          MOCK_PARTS.push({
+            part_id: partId,
+            part_name: partName,
+            category: shapeCategory,
+            color: colorHex,
+            type: shapeType,
+            reference_image_url: getBrickSvg(colorHex, shapeType)
+          });
+        }
+        await addInventoryItem({
+          part_id: partId,
+          quantity: qty,
+          source_image_key: null
+        });
+      } else {
+        // Real mode: there is no client-side catalogue. Send the shape and
+        // colour and let inventory-crud look up the matching parts_catalog
+        // row, creating one if this pair has not been seen before - the same
+        // resolution path the scan flow uses.
+        await addInventoryItem({
+          type: shapeType,
+          color: colorHex,
+          part_name: partName,
+          category: shapeCategory,
+          quantity: qty,
+          source_image_key: null
+        });
+      }
       triggerInventoryUpdate();
       closePanel(panelId);
     } catch (err) {

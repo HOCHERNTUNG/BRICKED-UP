@@ -79,3 +79,31 @@ input, button, select, textarea {
 .animate-spin {
   animation: spin 1s linear infinite;
 }
+
+/* Attribution for BrickLink catalogue artwork (see index.html). Deliberately
+   unobtrusive: the workspace is a full-viewport canvas, so this sits in the
+   bottom-right corner and never intercepts pointer events. Uses the theme
+   tokens so it stays legible across every theme. */
+.attribution-credit {
+  position: fixed;
+  right: 10px;
+  bottom: 6px;
+  z-index: 1;
+  pointer-events: none;
+  font-family: var(--font-body);
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--grey-600);
+  opacity: 0.65;
+  user-select: none;
+}
+
+.attribution-credit a {
+  pointer-events: auto;
+  color: inherit;
+  text-decoration: underline;
+}
+
+.attribution-credit a:hover {
+  opacity: 1;
+}

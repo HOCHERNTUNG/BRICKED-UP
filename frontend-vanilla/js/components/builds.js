@@ -1,5 +1,6 @@
 import { getBuilds, getBuildDetail } from '../api/builds.js';
 import { spawnStandalonePanel } from '../hooks/state.js';
+import { partImageAttrs } from '../api/partImage.js';
 
 let buildsList = [];
 let activeBuildId = null;
@@ -191,7 +192,7 @@ function renderDetailView(container) {
       partRow.className = `part-req-row ${isComplete ? 'complete' : ''}`;
       
       partRow.innerHTML = `
-        <img src="${part.reference_image_url}" alt="${part.part_name}" class="part-req-img" />
+        <img ${partImageAttrs(part, part.part_name)} class="part-req-img" />
         <div class="part-req-info font-body">
           <div style="flex:1">
             <span class="part-req-name font-display" style="display:block">${part.part_name}</span>

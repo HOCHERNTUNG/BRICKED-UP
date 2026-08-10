@@ -1,7 +1,7 @@
 (() => {
   // js/api/client.js
-  var IS_MOCKED = true;
-  var API_BASE_URL = "";
+  var IS_MOCKED = false;
+  var API_BASE_URL = "https://w45s12yx64.execute-api.ap-southeast-1.amazonaws.com/prod";
   var activeToken = null;
   function setActiveToken(token) {
     activeToken = token;
@@ -31,8 +31,8 @@
     if (!email || !password || !displayName) {
       throw new Error("Please fill in all details");
     }
-    if (password.length < 6) {
-      throw new Error("Password must be at least 6 characters");
+    if (password.length < 8) {
+      throw new Error("Password must be at least 8 characters");
     }
     const userSub = "usr_" + Math.random().toString(36).substr(2, 9);
     return { userSub };
@@ -452,8 +452,13 @@
           renderAuth(parentEl);
           return;
         }
-        if (passwordValue.length < 6) {
-          authErrorMsg = "Password must be at least 6 blocks long.";
+        if (passwordValue.length < 8) {
+          authErrorMsg = "Password must be at least 8 blocks long.";
+          renderAuth(parentEl);
+          return;
+        }
+        if (!/[a-z]/.test(passwordValue) || !/[0-9]/.test(passwordValue)) {
+          authErrorMsg = "Password needs at least one letter and one number.";
           renderAuth(parentEl);
           return;
         }
@@ -1617,7 +1622,8 @@
     await sleep3(600);
     return [...mockInventory];
   }
-  async function addInventoryItem({ part_id, quantity, source_image_key }) {
+  async function addInventoryItem(item) {
+    const { part_id, quantity, source_image_key } = item;
     if (!IS_MOCKED) {
       const res = await fetch(`${API_BASE_URL}/inventory`, {
         method: "POST",
@@ -1625,7 +1631,7 @@
           "Content-Type": "application/json",
           ...authHeader()
         },
-        body: JSON.stringify({ part_id, quantity, source_image_key })
+        body: JSON.stringify(item)
       });
       if (!res.ok) throw new Error("Failed to add inventory item");
       return await res.json();
@@ -1679,6 +1685,16 @@
       throw new Error(`Inventory item ${inventory_id} not found`);
     }
     return { success: true };
+  }
+
+  // js/api/partImage.js
+  function partImageAttrs(part, alt = "") {
+    const fallback = part?.fallback_image_svg || "";
+    const primary = part?.reference_image_url || fallback;
+    const safeFallback = fallback.replace(/'/g, "%27");
+    const escAlt = String(alt).replace(/"/g, "&quot;");
+    const onerror = safeFallback ? ` onerror="this.onerror=null; this.src='${safeFallback}';"` : "";
+    return `src="${primary}"${onerror} alt="${escAlt}"`;
   }
 
   // js/components/scanner.js
@@ -1904,7 +1920,7 @@
       <div class="brick-card-body">
         <div class="candidate-card-layout">
           <div class="candidate-image-wrapper">
-            <img src="${cand.part.reference_image_url}" alt="${cand.part.part_name}" class="candidate-part-img" />
+            <img ${partImageAttrs(cand.part, cand.part.part_name)} class="candidate-part-img" />
           </div>
           <div class="candidate-info-wrapper">
             <div class="candidate-header-row">
@@ -2124,7 +2140,7 @@
       card.innerHTML = `
       <div class="part-card-inner">
         <div class="part-img-holder">
-          <img src="${item.reference_image_url}" alt="${parsed.name}" />
+          <img ${partImageAttrs(item, parsed.name)} />
         </div>
         <div class="part-card-content">
           <div class="part-meta-row font-display" style="display:flex; gap:5px; margin-bottom:4px">
@@ -2468,7 +2484,7 @@
         const partRow = document.createElement("div");
         partRow.className = `part-req-row ${isComplete ? "complete" : ""}`;
         partRow.innerHTML = `
-        <img src="${part.reference_image_url}" alt="${part.part_name}" class="part-req-img" />
+        <img ${partImageAttrs(part, part.part_name)} class="part-req-img" />
         <div class="part-req-info font-body">
           <div style="flex:1">
             <span class="part-req-name font-display" style="display:block">${part.part_name}</span>
@@ -2669,27 +2685,38 @@
       const colorName = colorVal[0];
       const colorHex = colorVal[1];
       const partName = `${shapeName} (${colorName})`;
-      let existingPart = MOCK_PARTS.find((p) => p.type === shapeType && p.color === colorHex);
-      let partId;
-      if (existingPart) {
-        partId = existingPart.part_id;
-      } else {
-        partId = Math.max(...MOCK_PARTS.map((p) => p.part_id), 0) + 1;
-        MOCK_PARTS.push({
-          part_id: partId,
-          part_name: partName,
-          category: shapeCategory,
-          color: colorHex,
-          type: shapeType,
-          reference_image_url: getBrickSvg(colorHex, shapeType)
-        });
-      }
       try {
-        await addInventoryItem({
-          part_id: partId,
-          quantity: qty,
-          source_image_key: null
-        });
+        if (IS_MOCKED) {
+          let existingPart = MOCK_PARTS.find((p) => p.type === shapeType && p.color === colorHex);
+          let partId;
+          if (existingPart) {
+            partId = existingPart.part_id;
+          } else {
+            partId = Math.max(...MOCK_PARTS.map((p) => p.part_id), 0) + 1;
+            MOCK_PARTS.push({
+              part_id: partId,
+              part_name: partName,
+              category: shapeCategory,
+              color: colorHex,
+              type: shapeType,
+              reference_image_url: getBrickSvg(colorHex, shapeType)
+            });
+          }
+          await addInventoryItem({
+            part_id: partId,
+            quantity: qty,
+            source_image_key: null
+          });
+        } else {
+          await addInventoryItem({
+            type: shapeType,
+            color: colorHex,
+            part_name: partName,
+            category: shapeCategory,
+            quantity: qty,
+            source_image_key: null
+          });
+        }
         triggerInventoryUpdate();
         closePanel(panelId);
       } catch (err) {
@@ -2926,13 +2953,7 @@
       container.appendChild(backdrop);
     }
     backdrop.innerHTML = "";
-    const totalBricksCount = mockInventory.reduce((acc, curr) => acc + curr.quantity, 0);
-    let builderRank = "Apprentice Builder";
-    if (totalBricksCount > 20) {
-      builderRank = "Master Designer";
-    } else if (totalBricksCount > 10) {
-      builderRank = "Senior Builder";
-    }
+    const builderRank = "Loading\u2026";
     const card = document.createElement("div");
     card.className = "brick-card settings-modal-card";
     card.innerHTML = `
@@ -3035,6 +3056,15 @@
         setStudStyle(btn.getAttribute("data-stud-opt"));
       };
     });
+    getInventory().then((items) => {
+      const total = (items || []).reduce((acc, curr) => acc + curr.quantity, 0);
+      const rank = total > 20 ? "Master Designer" : total > 10 ? "Senior Builder" : "Apprentice Builder";
+      const tag = card.querySelector(".profile-rank-tag");
+      if (tag) tag.textContent = rank;
+    }).catch(() => {
+      const tag = card.querySelector(".profile-rank-tag");
+      if (tag) tag.textContent = "Apprentice Builder";
+    });
     backdrop.appendChild(card);
   }
   function getBrickColorStyles2(colorName) {
@@ -3083,7 +3113,7 @@
       container.style.boxSizing = "border-box";
       container.innerHTML = `
       <div class="part-img-holder" style="width: 100px; height: 100px; display:flex; align-items:center; justify-content:center; background: rgba(255,255,255,0.75); border: 2.5px solid var(--ink-900); border-radius: var(--radius-card); box-shadow: inset 0 2px 5px rgba(0,0,0,0.1); margin-bottom: 8px; box-sizing: border-box; padding: 8px;">
-        <img src="${freshItem.reference_image_url}" alt="${parsed.name}" style="max-width:90%; max-height:90%; object-fit:contain;" />
+        <img ${partImageAttrs(freshItem, parsed.name)} style="max-width:90%; max-height:90%; object-fit:contain;" />
       </div>
       <div style="text-align: center; width: 100%;">
         <div style="display:flex; justify-content:center; gap:6px; margin-bottom:6px">
@@ -3219,7 +3249,7 @@
         const partRow = document.createElement("div");
         partRow.className = `part-req-row ${isComplete ? "complete" : ""}`;
         partRow.innerHTML = `
-        <img src="${part.reference_image_url}" alt="${part.part_name}" class="part-req-img" />
+        <img ${partImageAttrs(part, part.part_name)} class="part-req-img" />
         <div class="part-req-info font-body" style="flex:1; display:flex; align-items:center; justify-content:space-between">
           <div style="flex:1">
             <span class="part-req-name font-display" style="display:block; font-size:0.8rem; color: var(--ink-900);">${part.part_name}</span>

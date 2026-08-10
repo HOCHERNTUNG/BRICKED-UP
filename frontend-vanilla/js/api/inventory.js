@@ -21,15 +21,20 @@ export async function getInventory() {
   return [...mockInventory];
 }
 
-export async function addInventoryItem({ part_id, quantity, source_image_key }) {
+export async function addInventoryItem(item) {
+  const { part_id, quantity, source_image_key } = item;
+
   if (!IS_MOCKED) {
+    // Forward the whole object, not just the three fields above. The manual
+    // Add Part flow has no part_id to send - it sends type + color and lets
+    // inventory-crud resolve or create the catalogue row server-side.
     const res = await fetch(`${API_BASE_URL}/inventory`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         ...authHeader()
       },
-      body: JSON.stringify({ part_id, quantity, source_image_key })
+      body: JSON.stringify(item)
     });
     if (!res.ok) throw new Error('Failed to add inventory item');
     return await res.json();

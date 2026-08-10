@@ -18,10 +18,10 @@ import {
   triggerInventoryUpdate,
   openAllPanels
 } from '../hooks/state.js';
-import { mockInventory } from '../api/fixtures.js';
 import { playSound } from '../hooks/sound.js';
 import { getBuildDetail } from '../api/builds.js';
 import { getInventory, updateInventoryItem, deleteInventoryItem } from '../api/inventory.js';
+import { partImageAttrs } from '../api/partImage.js';
 
 /**
  * Main Workspace Layout in Vanilla JS
@@ -306,13 +306,11 @@ function renderSettingsModal(container, state) {
   }
   backdrop.innerHTML = '';
 
-  const totalBricksCount = mockInventory.reduce((acc, curr) => acc + curr.quantity, 0);
-  let builderRank = 'Apprentice Builder';
-  if (totalBricksCount > 20) {
-    builderRank = 'Master Designer';
-  } else if (totalBricksCount > 10) {
-    builderRank = 'Senior Builder';
-  }
+  // Builder Rank comes from the user's real inventory. getInventory() is the
+  // properly branched accessor - the raw mockInventory array simply does not
+  // exist once IS_MOCKED is false. It is asynchronous, so the badge renders
+  // with a placeholder and is filled in below once the data arrives.
+  const builderRank = 'Loading…';
 
   const card = document.createElement('div');
   card.className = 'brick-card settings-modal-card';
@@ -422,6 +420,20 @@ function renderSettingsModal(container, state) {
     };
   });
 
+  getInventory()
+    .then((items) => {
+      const total = (items || []).reduce((acc, curr) => acc + curr.quantity, 0);
+      const rank = total > 20 ? 'Master Designer'
+        : total > 10 ? 'Senior Builder'
+        : 'Apprentice Builder';
+      const tag = card.querySelector('.profile-rank-tag');
+      if (tag) tag.textContent = rank;
+    })
+    .catch(() => {
+      const tag = card.querySelector('.profile-rank-tag');
+      if (tag) tag.textContent = 'Apprentice Builder';
+    });
+
   backdrop.appendChild(card);
 }
 
@@ -479,7 +491,7 @@ function renderStandalonePart(body, item, panelId) {
 
     container.innerHTML = `
       <div class="part-img-holder" style="width: 100px; height: 100px; display:flex; align-items:center; justify-content:center; background: rgba(255,255,255,0.75); border: 2.5px solid var(--ink-900); border-radius: var(--radius-card); box-shadow: inset 0 2px 5px rgba(0,0,0,0.1); margin-bottom: 8px; box-sizing: border-box; padding: 8px;">
-        <img src="${freshItem.reference_image_url}" alt="${parsed.name}" style="max-width:90%; max-height:90%; object-fit:contain;" />
+        <img ${partImageAttrs(freshItem, parsed.name)} style="max-width:90%; max-height:90%; object-fit:contain;" />
       </div>
       <div style="text-align: center; width: 100%;">
         <div style="display:flex; justify-content:center; gap:6px; margin-bottom:6px">
@@ -635,7 +647,7 @@ function renderStandaloneBuild(body, build) {
       partRow.className = `part-req-row ${isComplete ? 'complete' : ''}`;
       
       partRow.innerHTML = `
-        <img src="${part.reference_image_url}" alt="${part.part_name}" class="part-req-img" />
+        <img ${partImageAttrs(part, part.part_name)} class="part-req-img" />
         <div class="part-req-info font-body" style="flex:1; display:flex; align-items:center; justify-content:space-between">
           <div style="flex:1">
             <span class="part-req-name font-display" style="display:block; font-size:0.8rem; color: var(--ink-900);">${part.part_name}</span>
