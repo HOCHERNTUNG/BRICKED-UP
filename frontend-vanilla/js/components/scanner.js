@@ -1,4 +1,5 @@
 import { getUploadUrl, uploadImage, scanBrick, scanBatch } from '../api/scanner.js';
+import { showToast, pluralParts } from '../hooks/toast.js';
 import { addInventoryItem } from '../api/inventory.js';
 import { triggerInventoryUpdate } from '../hooks/state.js';
 
@@ -114,9 +115,9 @@ function renderIdleState(parent) {
   demoSection.innerHTML = `
     <span class="demo-label font-display">Or Try Demo Photos:</span>
     <div class="demo-buttons-grid">
-      <button type="button" class="demo-scan-btn font-display" data-type="red">🔴 Red Brick</button>
-      <button type="button" class="demo-scan-btn font-display" data-type="blue">🔵 Blue Plate</button>
-      <button type="button" class="demo-scan-btn font-display" data-type="batch">📦 Multi-Scan (Batch)</button>
+      <button type="button" class="demo-scan-btn font-display" data-type="red">Sample: 2x4 Brick</button>
+      <button type="button" class="demo-scan-btn font-display" data-type="blue">Sample: 2x4 Plate</button>
+      <button type="button" class="demo-scan-btn font-display" data-type="batch">Sample: Multiple Bricks</button>
     </div>
   `;
 
@@ -257,6 +258,7 @@ function renderResults(parent) {
       });
       await Promise.all(promises);
       triggerInventoryUpdate();
+      showToast(`Added ${pluralParts(promises.length)} to your inventory`);
       renderResults(parent); // refresh view
     };
     actionsGroup.appendChild(addAllBtn);
@@ -325,9 +327,10 @@ function renderResults(parent) {
           });
           addedIndices.add(idx);
           triggerInventoryUpdate();
+          showToast(`Added ${cand.part.part_name} to your inventory`);
           renderResults(parent);
         } catch (err) {
-          alert('Could not add item');
+          showToast('Could not add that part - please try again.');
         }
       };
     }

@@ -1504,3 +1504,109 @@ input[type=number]::-webkit-outer-spin-button {
 input[type=number] {
   -moz-appearance: textfield;
 }
+
+/* ---------------------------------------------------------------------------
+   Batch scan result fixes
+   .candidates-list is a flex column with a max-height. Flex children default
+   to flex-shrink:1, so once several results appeared they were compressed
+   vertically until the cards overlapped into an unreadable block instead of
+   scrolling. Pinning each card's height and letting the list scroll fixes it.
+   --------------------------------------------------------------------------- */
+.candidates-list {
+  max-height: min(46vh, 380px);
+  padding-right: 6px;
+}
+
+.candidate-card {
+  flex: 0 0 auto;          /* never compress; scroll the list instead */
+  padding: 10px 12px;
+  margin: 0;
+}
+
+.candidate-card .brick-card-body {
+  padding: 0;
+}
+
+.candidate-card-layout {
+  min-height: 78px;
+}
+
+.candidate-info-wrapper {
+  min-width: 0;            /* allow long part names to ellipsis rather than
+                              forcing the row wider than the panel */
+}
+
+.candidate-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.candidate-header-row {
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* ---------------------------------------------------------------------------
+   The floating "add piece manually" button is positioned absolutely inside the
+   inventory panel body, so it escaped the collapsed panel and hovered over the
+   workspace when the panel was minimised.
+   --------------------------------------------------------------------------- */
+.panel-container.is-collapsed .inventory-floating-add-btn,
+.panel-chrome.is-collapsed .inventory-floating-add-btn {
+  display: none !important;
+}
+
+/* ---------------------------------------------------------------------------
+   Toast confirmations
+   --------------------------------------------------------------------------- */
+.bu-toast-host {
+  position: fixed;
+  left: 50%;
+  bottom: 92px;
+  transform: translateX(-50%);
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  pointer-events: none;
+}
+
+.bu-toast {
+  font-family: var(--font-display);
+  font-size: 0.82rem;
+  font-weight: 800;
+  color: var(--ink-900);
+  background-color: var(--white);
+  border: 2.5px solid var(--ink-900);
+  border-radius: 10px;
+  box-shadow: 0 4px 0 var(--ink-900);
+  padding: 9px 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  animation: bu-toast-in 0.22s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.bu-toast.is-leaving {
+  animation: bu-toast-out 0.2s ease forwards;
+}
+
+.bu-toast .bu-toast-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  border: 2px solid var(--ink-900);
+  background-color: var(--brick-green);
+  flex-shrink: 0;
+}
+
+@keyframes bu-toast-in {
+  from { opacity: 0; transform: translateY(10px) scale(0.96); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes bu-toast-out {
+  to { opacity: 0; transform: translateY(6px); }
+}

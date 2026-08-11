@@ -156,6 +156,34 @@ export function closePanel(id) {
   notify();
 }
 
+/**
+ * Readable text colour for a given background, chosen by relative luminance
+ * so a tag stays legible on both a black brick and a white one.
+ */
+export function contrastTextFor(hex) {
+  const h = String(hex || '').replace('#', '');
+  if (h.length !== 6) return 'var(--ink-900)';
+  const [r, g, b] = [0, 2, 4].map(i => parseInt(h.slice(i, i + 2), 16) / 255);
+  const lin = (c) => (c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4));
+  const L = 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
+  return L > 0.45 ? 'var(--ink-900)' : '#FFFFFF';
+}
+
+/**
+ * Colour tag for a part. Prefers the official LEGO colour name and its real
+ * hex, which the API now returns from the Rebrickable colours table. Falls
+ * back to parsing the part name only for mock mode, where there is no server
+ * to ask - that guesswork is what produced wrong swatches and informal names
+ * like "Grey" in place of "Dark Bluish Gray".
+ */
+export function resolveColorTag(item) {
+  if (item && item.color_name) {
+    return { label: item.color_name, hex: item.color_hex || null };
+  }
+  const parsed = parsePartNameAndColor(item && item.part_name);
+  return { label: parsed.color, hex: null };
+}
+
 export function parsePartNameAndColor(fullName) {
   if (!fullName) return { name: 'Part', color: 'Generic' };
   const match = fullName.match(/^(.*?)\s*\((.*?)\)$/);

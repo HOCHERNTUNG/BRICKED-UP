@@ -320,6 +320,21 @@
     }
     notify();
   }
+  function contrastTextFor(hex) {
+    const h = String(hex || "").replace("#", "");
+    if (h.length !== 6) return "var(--ink-900)";
+    const [r, g, b] = [0, 2, 4].map((i) => parseInt(h.slice(i, i + 2), 16) / 255);
+    const lin = (c) => c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+    const L = 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
+    return L > 0.45 ? "var(--ink-900)" : "#FFFFFF";
+  }
+  function resolveColorTag(item) {
+    if (item && item.color_name) {
+      return { label: item.color_name, hex: item.color_hex || null };
+    }
+    const parsed = parsePartNameAndColor(item && item.part_name);
+    return { label: parsed.color, hex: null };
+  }
   function parsePartNameAndColor(fullName) {
     if (!fullName) return { name: "Part", color: "Generic" };
     const match = fullName.match(/^(.*?)\s*\((.*?)\)$/);
@@ -1751,6 +1766,36 @@
     return { candidates: candidates2 };
   }
 
+  // js/hooks/toast.js
+  var HOST_ID = "bu-toast-host";
+  var DEFAULT_MS = 2600;
+  function host() {
+    let el = document.getElementById(HOST_ID);
+    if (!el) {
+      el = document.createElement("div");
+      el.id = HOST_ID;
+      el.className = "bu-toast-host";
+      document.body.appendChild(el);
+    }
+    return el;
+  }
+  function showToast(message, opts = {}) {
+    const el = document.createElement("div");
+    el.className = "bu-toast";
+    el.setAttribute("role", "status");
+    el.innerHTML = `<span class="bu-toast-dot"></span><span></span>`;
+    el.lastElementChild.textContent = message;
+    host().appendChild(el);
+    const ms = opts.duration || DEFAULT_MS;
+    setTimeout(() => {
+      el.classList.add("is-leaving");
+      setTimeout(() => el.remove(), 220);
+    }, ms);
+  }
+  function pluralParts(n) {
+    return `${n} part${n === 1 ? "" : "s"}`;
+  }
+
   // js/api/inventory.js
   var sleep3 = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
   async function getInventory() {
@@ -1945,9 +1990,9 @@
     demoSection.innerHTML = `
     <span class="demo-label font-display">Or Try Demo Photos:</span>
     <div class="demo-buttons-grid">
-      <button type="button" class="demo-scan-btn font-display" data-type="red">\u{1F534} Red Brick</button>
-      <button type="button" class="demo-scan-btn font-display" data-type="blue">\u{1F535} Blue Plate</button>
-      <button type="button" class="demo-scan-btn font-display" data-type="batch">\u{1F4E6} Multi-Scan (Batch)</button>
+      <button type="button" class="demo-scan-btn font-display" data-type="red">Sample: 2x4 Brick</button>
+      <button type="button" class="demo-scan-btn font-display" data-type="blue">Sample: 2x4 Plate</button>
+      <button type="button" class="demo-scan-btn font-display" data-type="batch">Sample: Multiple Bricks</button>
     </div>
   `;
     const DEMO_PHOTOS = {
@@ -2067,6 +2112,7 @@
         });
         await Promise.all(promises);
         triggerInventoryUpdate();
+        showToast(`Added ${pluralParts(promises.length)} to your inventory`);
         renderResults(parent);
       };
       actionsGroup.appendChild(addAllBtn);
@@ -2123,9 +2169,10 @@
             });
             addedIndices.add(idx);
             triggerInventoryUpdate();
+            showToast(`Added ${cand.part.part_name} to your inventory`);
             renderResults(parent);
           } catch (err) {
-            alert("Could not add item");
+            showToast("Could not add that part - please try again.");
           }
         };
       }
@@ -2307,7 +2354,8 @@
     grid.className = "inventory-items-grid";
     filtered.forEach((item) => {
       const parsed = parsePartNameAndColor(item.part_name);
-      const colorStyles = getBrickColorStyles(parsed.color);
+      const tag = resolveColorTag(item);
+      const colorStyles = tag.hex ? { bg: tag.hex, text: contrastTextFor(tag.hex) } : getBrickColorStyles(tag.label);
       const card = document.createElement("div");
       card.className = "brick-card inventory-part-card";
       card.innerHTML = `
@@ -2318,7 +2366,7 @@
         <div class="part-card-content">
           <div class="part-meta-row font-display" style="display:flex; gap:5px; margin-bottom:4px">
             <span class="part-badge-cat" style="background-color: var(--cream-200); border: 1.5px solid var(--ink-900); border-radius: 4px; padding: 1px 4px; font-size: 0.62rem; font-weight: 800; text-transform: uppercase; color: var(--ink-900);">${item.category}</span>
-            <span class="part-badge-color" style="background-color: ${colorStyles.bg}; color: ${colorStyles.text}; border: 1.5px solid var(--ink-900); border-radius: 4px; padding: 1px 4px; font-size: 0.62rem; font-weight: 800; text-transform: uppercase;">${parsed.color}</span>
+            <span class="part-badge-color" style="background-color: ${colorStyles.bg}; color: ${colorStyles.text}; border: 1.5px solid var(--ink-900); border-radius: 4px; padding: 1px 4px; font-size: 0.62rem; font-weight: 800; text-transform: uppercase;">${tag.label}</span>
           </div>
           <h6 class="part-display-name font-display" title="${parsed.name}">${parsed.name}</h6>
           
@@ -2801,13 +2849,26 @@
     <div class="input-group" style="display:flex; flex-direction:column; gap:4px;">
       <label class="input-label font-display" style="font-size:0.72rem; font-weight:800; text-transform:uppercase; color:var(--ink-900);">Part Shape</label>
       <select class="part-shape-select font-body" style="width:100%; height:36px; border:2.5px solid var(--ink-900); border-radius:6px; font-weight:800; padding:0 8px; background:var(--white); outline:none; box-sizing:border-box; color:var(--ink-900);">
-        <option value="2x4 Brick|brick-2x4|Brick">2x4 Brick</option>
+        <option value="1x1 Brick|brick-1x1|Brick">1x1 Brick</option>
+        <option value="1x2 Brick|brick-1x2|Brick">1x2 Brick</option>
+        <option value="1x4 Brick|brick-1x4|Brick">1x4 Brick</option>
         <option value="2x2 Brick|brick-2x2|Brick">2x2 Brick</option>
+        <option value="2x3 Brick|brick-2x3|Brick">2x3 Brick</option>
+        <option value="2x4 Brick|brick-2x4|Brick">2x4 Brick</option>
+        <option value="1x1 Round Brick|brick-1x1-round|Brick">1x1 Round Brick</option>
+        <option value="2x2 Round Brick|brick-2x2-round|Brick">2x2 Round Brick</option>
+        <option value="1x1 Plate|plate-1x1|Plate">1x1 Plate</option>
         <option value="1x2 Plate|plate-1x2|Plate">1x2 Plate</option>
         <option value="2x2 Plate|plate-2x2|Plate">2x2 Plate</option>
         <option value="2x4 Plate|plate-2x4|Plate">2x4 Plate</option>
+        <option value="4x4 Plate|plate-4x4|Plate">4x4 Plate</option>
+        <option value="1x1 Round Plate|plate-1x1-round|Plate">1x1 Round Plate</option>
+        <option value="1x2 Tile|tile-1x2|Tile">1x2 Tile</option>
+        <option value="2x2 Tile|tile-2x2|Tile">2x2 Tile</option>
         <option value="2x2 Slope 45\xB0|slope-2x2|Slope">2x2 Slope 45\xB0</option>
+        <option value="2x2 Inverted Slope 45\xB0|slope-inv-2x2|Slope">2x2 Inverted Slope 45\xB0</option>
         <option value="Technic 1x1 Brick|technic-1x1|Technic">Technic 1x1 Brick</option>
+        <option value="Technic 1x2 Brick|technic-1x2|Technic">Technic 1x2 Brick</option>
       </select>
     </div>
 
@@ -2886,13 +2947,13 @@
           await addInventoryItem({
             type: shapeType,
             color: colorHex,
-            part_name: partName,
             category: shapeCategory,
             quantity: qty,
             source_image_key: null
           });
         }
         triggerInventoryUpdate();
+        showToast(`Added ${qty} \xD7 ${shapeName} to your inventory`);
         closePanel(panelId);
       } catch (err) {
         alert("Failed to add part: " + err.message);

@@ -1,5 +1,5 @@
 import { getInventory, updateInventoryItem, deleteInventoryItem } from '../api/inventory.js';
-import { triggerInventoryUpdate, spawnStandalonePanel, parsePartNameAndColor } from '../hooks/state.js';
+import { triggerInventoryUpdate, spawnStandalonePanel, parsePartNameAndColor , resolveColorTag, contrastTextFor } from '../hooks/state.js';
 import { partImageAttrs } from '../api/partImage.js';
 
 function getBrickColorStyles(colorName) {
@@ -224,7 +224,12 @@ function renderListBody(container) {
 
   filtered.forEach(item => {
     const parsed = parsePartNameAndColor(item.part_name);
-    const colorStyles = getBrickColorStyles(parsed.color);
+    // Official colour name + its true hex when the server supplied them;
+    // the old palette guess only knew six colours.
+    const tag = resolveColorTag(item);
+    const colorStyles = tag.hex
+      ? { bg: tag.hex, text: contrastTextFor(tag.hex) }
+      : getBrickColorStyles(tag.label);
     const card = document.createElement('div');
     card.className = 'brick-card inventory-part-card';
     card.innerHTML = `
@@ -235,7 +240,7 @@ function renderListBody(container) {
         <div class="part-card-content">
           <div class="part-meta-row font-display" style="display:flex; gap:5px; margin-bottom:4px">
             <span class="part-badge-cat" style="background-color: var(--cream-200); border: 1.5px solid var(--ink-900); border-radius: 4px; padding: 1px 4px; font-size: 0.62rem; font-weight: 800; text-transform: uppercase; color: var(--ink-900);">${item.category}</span>
-            <span class="part-badge-color" style="background-color: ${colorStyles.bg}; color: ${colorStyles.text}; border: 1.5px solid var(--ink-900); border-radius: 4px; padding: 1px 4px; font-size: 0.62rem; font-weight: 800; text-transform: uppercase;">${parsed.color}</span>
+            <span class="part-badge-color" style="background-color: ${colorStyles.bg}; color: ${colorStyles.text}; border: 1.5px solid var(--ink-900); border-radius: 4px; padding: 1px 4px; font-size: 0.62rem; font-weight: 800; text-transform: uppercase;">${tag.label}</span>
           </div>
           <h6 class="part-display-name font-display" title="${parsed.name}">${parsed.name}</h6>
           

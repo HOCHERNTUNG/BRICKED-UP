@@ -1,4 +1,5 @@
 import { addInventoryItem } from '../api/inventory.js';
+import { showToast } from '../hooks/toast.js';
 import { IS_MOCKED } from '../api/client.js';
 import { triggerInventoryUpdate, closePanel } from '../hooks/state.js';
 import { MOCK_PARTS, getBrickSvg } from '../api/fixtures.js';
@@ -21,13 +22,26 @@ export function renderAddPartPanel(bodyEl, panelId) {
     <div class="input-group" style="display:flex; flex-direction:column; gap:4px;">
       <label class="input-label font-display" style="font-size:0.72rem; font-weight:800; text-transform:uppercase; color:var(--ink-900);">Part Shape</label>
       <select class="part-shape-select font-body" style="width:100%; height:36px; border:2.5px solid var(--ink-900); border-radius:6px; font-weight:800; padding:0 8px; background:var(--white); outline:none; box-sizing:border-box; color:var(--ink-900);">
-        <option value="2x4 Brick|brick-2x4|Brick">2x4 Brick</option>
+        <option value="1x1 Brick|brick-1x1|Brick">1x1 Brick</option>
+        <option value="1x2 Brick|brick-1x2|Brick">1x2 Brick</option>
+        <option value="1x4 Brick|brick-1x4|Brick">1x4 Brick</option>
         <option value="2x2 Brick|brick-2x2|Brick">2x2 Brick</option>
+        <option value="2x3 Brick|brick-2x3|Brick">2x3 Brick</option>
+        <option value="2x4 Brick|brick-2x4|Brick">2x4 Brick</option>
+        <option value="1x1 Round Brick|brick-1x1-round|Brick">1x1 Round Brick</option>
+        <option value="2x2 Round Brick|brick-2x2-round|Brick">2x2 Round Brick</option>
+        <option value="1x1 Plate|plate-1x1|Plate">1x1 Plate</option>
         <option value="1x2 Plate|plate-1x2|Plate">1x2 Plate</option>
         <option value="2x2 Plate|plate-2x2|Plate">2x2 Plate</option>
         <option value="2x4 Plate|plate-2x4|Plate">2x4 Plate</option>
+        <option value="4x4 Plate|plate-4x4|Plate">4x4 Plate</option>
+        <option value="1x1 Round Plate|plate-1x1-round|Plate">1x1 Round Plate</option>
+        <option value="1x2 Tile|tile-1x2|Tile">1x2 Tile</option>
+        <option value="2x2 Tile|tile-2x2|Tile">2x2 Tile</option>
         <option value="2x2 Slope 45°|slope-2x2|Slope">2x2 Slope 45°</option>
+        <option value="2x2 Inverted Slope 45°|slope-inv-2x2|Slope">2x2 Inverted Slope 45°</option>
         <option value="Technic 1x1 Brick|technic-1x1|Technic">Technic 1x1 Brick</option>
+        <option value="Technic 1x2 Brick|technic-1x2|Technic">Technic 1x2 Brick</option>
       </select>
     </div>
 
@@ -118,16 +132,20 @@ export function renderAddPartPanel(bodyEl, panelId) {
         // colour and let inventory-crud look up the matching parts_catalog
         // row, creating one if this pair has not been seen before - the same
         // resolution path the scan flow uses.
+        // part_name is deliberately NOT sent. The server resolves the swatch
+        // to the nearest official LEGO colour and names the part from that,
+        // so the catalogue reads "Dark Bluish Gray" rather than our informal
+        // "Grey" - and manual adds match scanned ones exactly.
         await addInventoryItem({
           type: shapeType,
           color: colorHex,
-          part_name: partName,
           category: shapeCategory,
           quantity: qty,
           source_image_key: null
         });
       }
       triggerInventoryUpdate();
+      showToast(`Added ${qty} × ${shapeName} to your inventory`);
       closePanel(panelId);
     } catch (err) {
       alert('Failed to add part: ' + err.message);
