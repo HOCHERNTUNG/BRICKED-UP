@@ -22,6 +22,7 @@ import { playSound } from '../hooks/sound.js';
 import { getBuildDetail } from '../api/builds.js';
 import { getInventory, updateInventoryItem, deleteInventoryItem } from '../api/inventory.js';
 import { partImageAttrs } from '../api/partImage.js';
+import { API_BASE_URL, authHeader } from '../api/client.js';
 
 /**
  * Main Workspace Layout in Vanilla JS
@@ -667,6 +668,42 @@ function renderStandaloneBuild(body, build) {
     });
 
     detailContent.appendChild(partsList);
+
+    // "Email me the missing parts" - only meaningful while something is
+    // actually missing, so the button is hidden once the build is complete.
+    // POSTing here publishes to an SNS topic; a separate subscriber Lambda
+    // formats and sends the mail, so the request returns without waiting
+    // on SES.
+    const missingParts = detail.parts.filter(p => p.quantity_owned < p.quantity_required);
+    if (missingParts.length > 0) {
+      const emailBtn = document.createElement('button');
+      emailBtn.type = 'button';
+      emailBtn.className = 'brick-btn email-missing-btn font-display';
+      emailBtn.style.cssText =
+        'margin-top:12px;width:100%;padding:8px;font-size:0.78rem;cursor:pointer;';
+      emailBtn.textContent = `Email me the ${missingParts.length} missing part${missingParts.length === 1 ? '' : 's'}`;
+
+      emailBtn.onclick = async () => {
+        const original = emailBtn.textContent;
+        emailBtn.disabled = true;
+        emailBtn.textContent = 'Sending…';
+        try {
+          const res = await fetch(
+            `${API_BASE_URL}/builds/${detail.build_id}/email-missing-parts`,
+            { method: 'POST', headers: { 'Content-Type': 'application/json', ...authHeader() } }
+          );
+          if (!res.ok) throw new Error(`Request failed (${res.status})`);
+          emailBtn.textContent = 'Sent — check your inbox';
+        } catch (err) {
+          emailBtn.textContent = 'Could not send — try again';
+          emailBtn.disabled = false;
+          console.error('email-missing-parts failed:', err);
+          setTimeout(() => { emailBtn.textContent = original; }, 4000);
+        }
+      };
+
+      detailContent.appendChild(emailBtn);
+    }
 
     // Custom steps checklist
     const stepsTitle = document.createElement('h5');

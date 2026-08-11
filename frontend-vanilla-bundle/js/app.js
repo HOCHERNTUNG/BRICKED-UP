@@ -3265,6 +3265,35 @@
         partsList.appendChild(partRow);
       });
       detailContent.appendChild(partsList);
+      const missingParts = detail.parts.filter((p) => p.quantity_owned < p.quantity_required);
+      if (missingParts.length > 0) {
+        const emailBtn = document.createElement("button");
+        emailBtn.type = "button";
+        emailBtn.className = "brick-btn email-missing-btn font-display";
+        emailBtn.style.cssText = "margin-top:12px;width:100%;padding:8px;font-size:0.78rem;cursor:pointer;";
+        emailBtn.textContent = `Email me the ${missingParts.length} missing part${missingParts.length === 1 ? "" : "s"}`;
+        emailBtn.onclick = async () => {
+          const original = emailBtn.textContent;
+          emailBtn.disabled = true;
+          emailBtn.textContent = "Sending\u2026";
+          try {
+            const res = await fetch(
+              `${API_BASE_URL}/builds/${detail.build_id}/email-missing-parts`,
+              { method: "POST", headers: { "Content-Type": "application/json", ...authHeader() } }
+            );
+            if (!res.ok) throw new Error(`Request failed (${res.status})`);
+            emailBtn.textContent = "Sent \u2014 check your inbox";
+          } catch (err) {
+            emailBtn.textContent = "Could not send \u2014 try again";
+            emailBtn.disabled = false;
+            console.error("email-missing-parts failed:", err);
+            setTimeout(() => {
+              emailBtn.textContent = original;
+            }, 4e3);
+          }
+        };
+        detailContent.appendChild(emailBtn);
+      }
       const stepsTitle = document.createElement("h5");
       stepsTitle.className = "parts-title font-display";
       stepsTitle.style.fontSize = "0.9rem";
