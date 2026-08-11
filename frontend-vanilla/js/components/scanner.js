@@ -120,16 +120,31 @@ function renderIdleState(parent) {
     </div>
   `;
 
+  // Real photographs shipped with the site. These used to be zero-byte
+  // placeholder File objects, which mock mode never noticed but Rekognition
+  // rejects outright - an empty image is not a valid image.
+  const DEMO_PHOTOS = {
+    red:   'assets/demo/red-brick.jpg',
+    blue:  'assets/demo/blue-plate.jpg',
+    batch: 'assets/demo/batch-bricks.jpg'
+  };
+
   demoSection.querySelectorAll('[data-type]').forEach(btn => {
-    btn.onclick = () => {
+    btn.onclick = async () => {
       const type = btn.getAttribute('data-type');
-      let dummyFile = new File([''], 'red_brick.jpg', { type: 'image/jpeg' });
-      if (type === 'blue') {
-        dummyFile = new File([''], 'blue_plate.jpg', { type: 'image/jpeg' });
-      } else if (type === 'batch') {
-        dummyFile = new File([''], 'batch_bricks.jpg', { type: 'image/jpeg' });
+      const path = DEMO_PHOTOS[type] || DEMO_PHOTOS.red;
+      const name = path.split('/').pop();
+      try {
+        const res = await fetch(path);
+        if (!res.ok) throw new Error(`Demo photo ${name} is missing`);
+        const blob = await res.blob();
+        const file = new File([blob], name, { type: 'image/jpeg' });
+        runDetectionFlow(file, type === 'batch', parent);
+      } catch (err) {
+        errorMsg = err.message || 'Could not load the demo photo.';
+        scanState = 'error';
+        renderScanner(parent);
       }
-      runDetectionFlow(dummyFile, type === 'batch', parent);
     };
   });
 

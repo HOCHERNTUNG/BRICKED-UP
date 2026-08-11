@@ -1,10 +1,27 @@
-import { IS_MOCKED, API_BASE_URL, authHeader } from './client.js';
+import { IS_MOCKED, API_BASE_URL, authHeader , ensureFreshToken } from './client.js';
 import { MOCK_PARTS } from './fixtures.js';
+import { toUploadableJpeg, UPLOAD_CONTENT_TYPE } from './imagePrep.js';
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+/**
+ * Surface the server's own message instead of a generic one.
+ * The API returns useful, user-facing text - "The scanner model isn't running
+ * right now", "Spread the pieces out on a plain surface" - and throwing a
+ * fixed string threw all of that away.
+ */
+async function apiError(res, fallback) {
+  try {
+    const body = await res.json();
+    if (body && body.message) return new Error(body.message);
+  } catch (_) { /* not JSON */ }
+  return new Error(fallback);
+}
+
+
 export async function getUploadUrl(fileName) {
   if (!IS_MOCKED) {
+    await ensureFreshToken();
     const res = await fetch(`${API_BASE_URL}/scanner/upload-url`, {
       method: 'POST',
       headers: {
@@ -13,7 +30,7 @@ export async function getUploadUrl(fileName) {
       },
       body: JSON.stringify({ fileName })
     });
-    if (!res.ok) throw new Error('Failed to get upload URL');
+    if (!res.ok) throw await apiError(res, 'Failed to get upload URL');
     return await res.json();
   }
 
@@ -25,11 +42,17 @@ export async function getUploadUrl(fileName) {
 
 export async function uploadImage(uploadUrl, file) {
   if (!IS_MOCKED) {
+    await ensureFreshToken();
+    // The URL is signed with Content-Type image/jpeg in SignedHeaders, so the
+    // PUT must carry exactly that header or S3 answers SignatureDoesNotMatch.
+    // toUploadableJpeg guarantees the body really is a JPEG (see imagePrep.js).
+    const body = await toUploadableJpeg(file);
     const res = await fetch(uploadUrl, {
       method: 'PUT',
-      body: file
+      headers: { 'Content-Type': UPLOAD_CONTENT_TYPE },
+      body
     });
-    if (!res.ok) throw new Error('Failed to upload image to S3');
+    if (!res.ok) throw new Error(`Upload to S3 failed (${res.status}). Try a different photo.`);
     return { success: true };
   }
 
@@ -39,6 +62,7 @@ export async function uploadImage(uploadUrl, file) {
 
 export async function scanBrick(key) {
   if (!IS_MOCKED) {
+    await ensureFreshToken();
     const res = await fetch(`${API_BASE_URL}/scanner/scan`, {
       method: 'POST',
       headers: {
@@ -47,7 +71,7 @@ export async function scanBrick(key) {
       },
       body: JSON.stringify({ key })
     });
-    if (!res.ok) throw new Error('Failed to scan brick');
+    if (!res.ok) throw await apiError(res, 'Failed to scan brick');
     return await res.json();
   }
 
@@ -89,6 +113,7 @@ export async function scanBrick(key) {
 
 export async function scanBatch(key) {
   if (!IS_MOCKED) {
+    await ensureFreshToken();
     const res = await fetch(`${API_BASE_URL}/scanner/scan-batch`, {
       method: 'POST',
       headers: {
@@ -97,7 +122,7 @@ export async function scanBatch(key) {
       },
       body: JSON.stringify({ key })
     });
-    if (!res.ok) throw new Error('Failed to scan batch');
+    if (!res.ok) throw await apiError(res, 'Failed to scan batch');
     return await res.json();
   }
 

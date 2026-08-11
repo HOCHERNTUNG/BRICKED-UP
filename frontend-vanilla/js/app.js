@@ -1,4 +1,5 @@
 import { getCurrentUser } from './api/auth.js';
+import { restoreSession } from './api/client.js';
 import { renderAuth } from './components/auth.js';
 import { renderWorkspace } from './components/workspace.js';
 import { forceReloadInventory } from './components/inventory.js';
@@ -80,15 +81,23 @@ async function init() {
     renderWorkspace(root, state, isPositionOnly);
   });
 
-  // Restore session from cache
+  // Restore session from cache.
+  //
+  // restoreSession() must run FIRST and synchronously: it pulls the stored
+  // token back into memory so the getCurrentUser() call below has something
+  // to authenticate with. Without it every reload started tokenless, /auth/me
+  // returned 401, and the user was bounced to the login screen - which is
+  // exactly the "logged out on refresh" behaviour reported in testing.
   setIsLoading(true);
   try {
-    const cachedUser = await getCurrentUser();
-    if (cachedUser) {
-      setUser(cachedUser, 'jwt_cached_session');
-    } else {
-      setUser(null);
+    const stored = restoreSession();
+    if (stored) {
+      // Show the workspace immediately from the cached profile, then confirm
+      // with the server so a revoked session still gets caught.
+      setUser(stored, 'restored_session');
     }
+    const cachedUser = await getCurrentUser();
+    setUser(cachedUser || null, cachedUser ? 'jwt_cached_session' : undefined);
   } catch (err) {
     console.error('Session restoration failed:', err);
     setUser(null);

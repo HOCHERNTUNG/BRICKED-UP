@@ -1,4 +1,4 @@
-import { IS_MOCKED, API_BASE_URL, authHeader } from './client.js';
+import { IS_MOCKED, API_BASE_URL, authHeader , ensureFreshToken } from './client.js';
 import { MOCK_BUILDS, mockInventory, MOCK_PARTS } from './fixtures.js';
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -20,6 +20,7 @@ function calculatePctOwned(build) {
 
 export async function getBuilds() {
   if (!IS_MOCKED) {
+    await ensureFreshToken();
     const res = await fetch(`${API_BASE_URL}/builds`, {
       headers: { ...authHeader() }
     });
@@ -40,6 +41,7 @@ export async function getBuilds() {
 
 export async function getBuildDetail(build_id) {
   if (!IS_MOCKED) {
+    await ensureFreshToken();
     const res = await fetch(`${API_BASE_URL}/builds/${build_id}`, {
       headers: { ...authHeader() }
     });

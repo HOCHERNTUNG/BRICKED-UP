@@ -1,4 +1,4 @@
-import { IS_MOCKED, API_BASE_URL, setActiveToken, authHeader } from './client.js';
+import { IS_MOCKED, API_BASE_URL, setActiveToken, authHeader , ensureFreshToken , clearSession } from './client.js';
 
 let currentUser = null;
 
@@ -46,7 +46,13 @@ export async function signIn({ email, password }) {
     }
     const result = await res.json();
     currentUser = result.user;
-    setActiveToken(result.idToken);
+    // Persist the refresh token and expiry too, so a page reload keeps the
+    // session and the ID token can be renewed before it lapses.
+    setActiveToken(result.idToken, {
+      refreshToken: result.refreshToken,
+      expiresIn: result.expiresIn,
+      user: result.user
+    });
     return result;
   }
 
@@ -77,6 +83,7 @@ export async function signIn({ email, password }) {
 
 export async function signOut() {
   if (!IS_MOCKED) {
+    await ensureFreshToken();
     try {
       await fetch(`${API_BASE_URL}/auth/signout`, {
         method: 'POST',
@@ -86,7 +93,7 @@ export async function signOut() {
       // Ignore network errors on signout
     }
     currentUser = null;
-    setActiveToken(null);
+    clearSession();
     return { success: true };
   }
 
@@ -98,6 +105,7 @@ export async function signOut() {
 
 export async function getCurrentUser() {
   if (!IS_MOCKED) {
+    await ensureFreshToken();
     if (currentUser) return currentUser;
     try {
       const res = await fetch(`${API_BASE_URL}/auth/me`, {

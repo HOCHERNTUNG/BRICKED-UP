@@ -2,9 +2,84 @@
   // js/api/client.js
   var IS_MOCKED = false;
   var API_BASE_URL = "https://w45s12yx64.execute-api.ap-southeast-1.amazonaws.com/prod";
+  var STORE_KEY = "brickedup.session";
+  var REFRESH_MARGIN_MS = 5 * 60 * 1e3;
   var activeToken = null;
-  function setActiveToken(token) {
+  var refreshToken = null;
+  var expiresAt = 0;
+  var cachedUser = null;
+  var inFlightRefresh = null;
+  function persist() {
+    try {
+      if (!activeToken) {
+        sessionStorage.removeItem(STORE_KEY);
+        return;
+      }
+      sessionStorage.setItem(STORE_KEY, JSON.stringify({
+        idToken: activeToken,
+        refreshToken,
+        expiresAt,
+        user: cachedUser
+      }));
+    } catch (_) {
+    }
+  }
+  function restoreSession() {
+    try {
+      const raw = sessionStorage.getItem(STORE_KEY);
+      if (!raw) return null;
+      const s = JSON.parse(raw);
+      if (!s.refreshToken && (!s.expiresAt || s.expiresAt <= Date.now())) {
+        sessionStorage.removeItem(STORE_KEY);
+        return null;
+      }
+      activeToken = s.idToken || null;
+      refreshToken = s.refreshToken || null;
+      expiresAt = s.expiresAt || 0;
+      cachedUser = s.user || null;
+      return cachedUser;
+    } catch (_) {
+      return null;
+    }
+  }
+  function setActiveToken(token, opts = {}) {
     activeToken = token;
+    if (opts.refreshToken !== void 0) refreshToken = opts.refreshToken;
+    if (opts.expiresIn) expiresAt = Date.now() + opts.expiresIn * 1e3;
+    if (opts.user !== void 0) cachedUser = opts.user;
+    persist();
+  }
+  function clearSession() {
+    activeToken = null;
+    refreshToken = null;
+    expiresAt = 0;
+    cachedUser = null;
+    persist();
+  }
+  async function ensureFreshToken() {
+    if (IS_MOCKED || !activeToken || !refreshToken) return activeToken;
+    if (expiresAt - Date.now() > REFRESH_MARGIN_MS) return activeToken;
+    if (!inFlightRefresh) {
+      inFlightRefresh = (async () => {
+        try {
+          const res = await fetch(`${API_BASE_URL}/auth/refresh`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ refreshToken })
+          });
+          if (!res.ok) throw new Error("refresh rejected");
+          const data = await res.json();
+          setActiveToken(data.idToken, { expiresIn: data.expiresIn });
+          return activeToken;
+        } catch (err) {
+          clearSession();
+          throw err;
+        } finally {
+          inFlightRefresh = null;
+        }
+      })();
+    }
+    return inFlightRefresh;
   }
   function authHeader(idToken) {
     const token = idToken || activeToken;
@@ -50,7 +125,11 @@
       }
       const result = await res.json();
       currentUser = result.user;
-      setActiveToken(result.idToken);
+      setActiveToken(result.idToken, {
+        refreshToken: result.refreshToken,
+        expiresIn: result.expiresIn,
+        user: result.user
+      });
       return result;
     }
     await sleep(1e3);
@@ -76,6 +155,7 @@
   }
   async function signOut() {
     if (!IS_MOCKED) {
+      await ensureFreshToken();
       try {
         await fetch(`${API_BASE_URL}/auth/signout`, {
           method: "POST",
@@ -84,7 +164,7 @@
       } catch (e) {
       }
       currentUser = null;
-      setActiveToken(null);
+      clearSession();
       return { success: true };
     }
     await sleep(400);
@@ -94,6 +174,7 @@
   }
   async function getCurrentUser() {
     if (!IS_MOCKED) {
+      await ensureFreshToken();
       if (currentUser) return currentUser;
       try {
         const res = await fetch(`${API_BASE_URL}/auth/me`, {
@@ -1475,10 +1556,66 @@
     return false;
   }
 
+  // js/api/imagePrep.js
+  var MAX_DIMENSION = 1600;
+  var JPEG_QUALITY = 0.9;
+  var UPLOAD_CONTENT_TYPE = "image/jpeg";
+  async function toUploadableJpeg(file) {
+    try {
+      const bitmap = await loadBitmap(file);
+      let { width, height } = bitmap;
+      const scale = Math.min(1, MAX_DIMENSION / Math.max(width, height));
+      width = Math.round(width * scale);
+      height = Math.round(height * scale);
+      const canvas = document.createElement("canvas");
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext("2d");
+      ctx.fillStyle = "#FFFFFF";
+      ctx.fillRect(0, 0, width, height);
+      ctx.drawImage(bitmap, 0, 0, width, height);
+      if (bitmap.close) bitmap.close();
+      const blob = await new Promise(
+        (resolve) => canvas.toBlob(resolve, UPLOAD_CONTENT_TYPE, JPEG_QUALITY)
+      );
+      return blob || file;
+    } catch (err) {
+      console.warn("Image conversion failed, uploading original:", err);
+      return file;
+    }
+  }
+  function loadBitmap(file) {
+    if (typeof createImageBitmap === "function") {
+      return createImageBitmap(file);
+    }
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      const url = URL.createObjectURL(file);
+      img.onload = () => {
+        URL.revokeObjectURL(url);
+        resolve(img);
+      };
+      img.onerror = (e) => {
+        URL.revokeObjectURL(url);
+        reject(e);
+      };
+      img.src = url;
+    });
+  }
+
   // js/api/scanner.js
   var sleep2 = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+  async function apiError(res, fallback) {
+    try {
+      const body = await res.json();
+      if (body && body.message) return new Error(body.message);
+    } catch (_) {
+    }
+    return new Error(fallback);
+  }
   async function getUploadUrl(fileName) {
     if (!IS_MOCKED) {
+      await ensureFreshToken();
       const res = await fetch(`${API_BASE_URL}/scanner/upload-url`, {
         method: "POST",
         headers: {
@@ -1487,7 +1624,7 @@
         },
         body: JSON.stringify({ fileName })
       });
-      if (!res.ok) throw new Error("Failed to get upload URL");
+      if (!res.ok) throw await apiError(res, "Failed to get upload URL");
       return await res.json();
     }
     await sleep2(400);
@@ -1497,11 +1634,14 @@
   }
   async function uploadImage(uploadUrl, file) {
     if (!IS_MOCKED) {
+      await ensureFreshToken();
+      const body = await toUploadableJpeg(file);
       const res = await fetch(uploadUrl, {
         method: "PUT",
-        body: file
+        headers: { "Content-Type": UPLOAD_CONTENT_TYPE },
+        body
       });
-      if (!res.ok) throw new Error("Failed to upload image to S3");
+      if (!res.ok) throw new Error(`Upload to S3 failed (${res.status}). Try a different photo.`);
       return { success: true };
     }
     await sleep2(1e3);
@@ -1509,6 +1649,7 @@
   }
   async function scanBrick(key) {
     if (!IS_MOCKED) {
+      await ensureFreshToken();
       const res = await fetch(`${API_BASE_URL}/scanner/scan`, {
         method: "POST",
         headers: {
@@ -1517,7 +1658,7 @@
         },
         body: JSON.stringify({ key })
       });
-      if (!res.ok) throw new Error("Failed to scan brick");
+      if (!res.ok) throw await apiError(res, "Failed to scan brick");
       return await res.json();
     }
     await sleep2(1200);
@@ -1552,6 +1693,7 @@
   }
   async function scanBatch(key) {
     if (!IS_MOCKED) {
+      await ensureFreshToken();
       const res = await fetch(`${API_BASE_URL}/scanner/scan-batch`, {
         method: "POST",
         headers: {
@@ -1560,7 +1702,7 @@
         },
         body: JSON.stringify({ key })
       });
-      if (!res.ok) throw new Error("Failed to scan batch");
+      if (!res.ok) throw await apiError(res, "Failed to scan batch");
       return await res.json();
     }
     await sleep2(1500);
@@ -1613,6 +1755,7 @@
   var sleep3 = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
   async function getInventory() {
     if (!IS_MOCKED) {
+      await ensureFreshToken();
       const res = await fetch(`${API_BASE_URL}/inventory`, {
         headers: { ...authHeader() }
       });
@@ -1625,6 +1768,7 @@
   async function addInventoryItem(item) {
     const { part_id, quantity, source_image_key } = item;
     if (!IS_MOCKED) {
+      await ensureFreshToken();
       const res = await fetch(`${API_BASE_URL}/inventory`, {
         method: "POST",
         headers: {
@@ -1645,6 +1789,7 @@
   }
   async function updateInventoryItem(inventory_id, { quantity }) {
     if (!IS_MOCKED) {
+      await ensureFreshToken();
       const res = await fetch(`${API_BASE_URL}/inventory/${inventory_id}`, {
         method: "PUT",
         headers: {
@@ -1672,6 +1817,7 @@
   }
   async function deleteInventoryItem(inventory_id) {
     if (!IS_MOCKED) {
+      await ensureFreshToken();
       const res = await fetch(`${API_BASE_URL}/inventory/${inventory_id}`, {
         method: "DELETE",
         headers: { ...authHeader() }
@@ -1689,12 +1835,28 @@
 
   // js/api/partImage.js
   function partImageAttrs(part, alt = "") {
-    const fallback = part?.fallback_image_svg || "";
-    const primary = part?.reference_image_url || fallback;
-    const safeFallback = fallback.replace(/'/g, "%27");
-    const escAlt = String(alt).replace(/"/g, "&quot;");
-    const onerror = safeFallback ? ` onerror="this.onerror=null; this.src='${safeFallback}';"` : "";
-    return `src="${primary}"${onerror} alt="${escAlt}"`;
+    const chain = [
+      part?.reference_image_url,
+      part?.fallback_image_svg,
+      part?.label_image_url
+    ].filter(Boolean);
+    if (chain.length === 0) return `src="" alt="${escapeAttr(alt)}"`;
+    const rest = chain.slice(1).map(encodeForAttr);
+    const onerror = rest.length ? ` onerror="${buildFallbackChain(rest)}"` : "";
+    return `src="${chain[0]}"${onerror} alt="${escapeAttr(alt)}"`;
+  }
+  function buildFallbackChain(sources) {
+    let handler = "this.onerror=null;";
+    for (let i = sources.length - 1; i >= 0; i--) {
+      handler = i === sources.length - 1 ? `this.onerror=null; this.src='${sources[i]}';` : `this.onerror=function(){${handler}}; this.src='${sources[i]}';`;
+    }
+    return handler;
+  }
+  function encodeForAttr(url) {
+    return String(url).replace(/'/g, "%27");
+  }
+  function escapeAttr(s) {
+    return String(s).replace(/"/g, "&quot;");
   }
 
   // js/components/scanner.js
@@ -1788,16 +1950,27 @@
       <button type="button" class="demo-scan-btn font-display" data-type="batch">\u{1F4E6} Multi-Scan (Batch)</button>
     </div>
   `;
+    const DEMO_PHOTOS = {
+      red: "assets/demo/red-brick.jpg",
+      blue: "assets/demo/blue-plate.jpg",
+      batch: "assets/demo/batch-bricks.jpg"
+    };
     demoSection.querySelectorAll("[data-type]").forEach((btn) => {
-      btn.onclick = () => {
+      btn.onclick = async () => {
         const type = btn.getAttribute("data-type");
-        let dummyFile = new File([""], "red_brick.jpg", { type: "image/jpeg" });
-        if (type === "blue") {
-          dummyFile = new File([""], "blue_plate.jpg", { type: "image/jpeg" });
-        } else if (type === "batch") {
-          dummyFile = new File([""], "batch_bricks.jpg", { type: "image/jpeg" });
+        const path = DEMO_PHOTOS[type] || DEMO_PHOTOS.red;
+        const name = path.split("/").pop();
+        try {
+          const res = await fetch(path);
+          if (!res.ok) throw new Error(`Demo photo ${name} is missing`);
+          const blob = await res.blob();
+          const file = new File([blob], name, { type: "image/jpeg" });
+          runDetectionFlow(file, type === "batch", parent);
+        } catch (err) {
+          errorMsg = err.message || "Could not load the demo photo.";
+          scanState = "error";
+          renderScanner(parent);
         }
-        runDetectionFlow(dummyFile, type === "batch", parent);
       };
     });
     container.appendChild(demoSection);
@@ -2281,6 +2454,7 @@
   }
   async function getBuilds() {
     if (!IS_MOCKED) {
+      await ensureFreshToken();
       const res = await fetch(`${API_BASE_URL}/builds`, {
         headers: { ...authHeader() }
       });
@@ -2299,6 +2473,7 @@
   }
   async function getBuildDetail(build_id) {
     if (!IS_MOCKED) {
+      await ensureFreshToken();
       const res = await fetch(`${API_BASE_URL}/builds/${build_id}`, {
         headers: { ...authHeader() }
       });
@@ -3400,12 +3575,12 @@
     });
     setIsLoading(true);
     try {
-      const cachedUser = await getCurrentUser();
-      if (cachedUser) {
-        setUser(cachedUser, "jwt_cached_session");
-      } else {
-        setUser(null);
+      const stored = restoreSession();
+      if (stored) {
+        setUser(stored, "restored_session");
       }
+      const cachedUser2 = await getCurrentUser();
+      setUser(cachedUser2 || null, cachedUser2 ? "jwt_cached_session" : void 0);
     } catch (err) {
       console.error("Session restoration failed:", err);
       setUser(null);

@@ -1,4 +1,4 @@
-import { IS_MOCKED, API_BASE_URL, authHeader } from './client.js';
+import { IS_MOCKED, API_BASE_URL, authHeader , ensureFreshToken } from './client.js';
 import {
   mockInventory,
   addMockInventoryItem,
@@ -10,6 +10,7 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 export async function getInventory() {
   if (!IS_MOCKED) {
+    await ensureFreshToken();
     const res = await fetch(`${API_BASE_URL}/inventory`, {
       headers: { ...authHeader() }
     });
@@ -25,6 +26,7 @@ export async function addInventoryItem(item) {
   const { part_id, quantity, source_image_key } = item;
 
   if (!IS_MOCKED) {
+    await ensureFreshToken();
     // Forward the whole object, not just the three fields above. The manual
     // Add Part flow has no part_id to send - it sends type + color and lets
     // inventory-crud resolve or create the catalogue row server-side.
@@ -50,6 +52,7 @@ export async function addInventoryItem(item) {
 
 export async function updateInventoryItem(inventory_id, { quantity }) {
   if (!IS_MOCKED) {
+    await ensureFreshToken();
     const res = await fetch(`${API_BASE_URL}/inventory/${inventory_id}`, {
       method: 'PUT',
       headers: {
@@ -81,6 +84,7 @@ export async function updateInventoryItem(inventory_id, { quantity }) {
 
 export async function deleteInventoryItem(inventory_id) {
   if (!IS_MOCKED) {
+    await ensureFreshToken();
     const res = await fetch(`${API_BASE_URL}/inventory/${inventory_id}`, {
       method: 'DELETE',
       headers: { ...authHeader() }
