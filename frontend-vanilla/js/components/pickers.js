@@ -29,6 +29,13 @@ import { partImageAttrs } from '../api/partImage.js';
 export function createShapePicker(catalogue, { value = null, onChange } = {}) {
   let selected = value || (catalogue.shapes[0] && catalogue.shapes[0].type);
 
+  // Categories as a filter row rather than headers inside the grid. Headers
+  // spanned the full width and forced a line break each, pushing most of the
+  // catalogue below the fold; chips keep browsing-by-category while costing
+  // one compact row, and they scale as more shapes are trained.
+  const categories = [...new Set(catalogue.shapes.map(s => s.category))].sort();
+  let activeCategory = 'All';
+
   const wrap = document.createElement('div');
   wrap.className = 'picker-block';
   wrap.innerHTML = `
@@ -37,21 +44,43 @@ export function createShapePicker(catalogue, { value = null, onChange } = {}) {
       <input type="search" class="picker-search font-body shape-search"
              placeholder="Search shapes or part number..." />
     </div>
+    <div class="category-chips" role="tablist" aria-label="Filter by category"></div>
     <div class="picker-grid shape-grid" role="listbox" aria-label="Part shape"
          data-layout="flat-sorted"></div>
   `;
   const grid = wrap.querySelector('.shape-grid');
   const search = wrap.querySelector('.shape-search');
+  const chipRow = wrap.querySelector('.category-chips');
+
+  function renderChips() {
+    chipRow.innerHTML = '';
+    ['All', ...categories].forEach(cat => {
+      const count = cat === 'All'
+        ? catalogue.shapes.length
+        : catalogue.shapes.filter(s => s.category === cat).length;
+      const chip = document.createElement('button');
+      chip.type = 'button';
+      chip.className = `category-chip font-display ${cat === activeCategory ? 'is-active' : ''}`;
+      chip.setAttribute('role', 'tab');
+      chip.setAttribute('aria-selected', String(cat === activeCategory));
+      chip.textContent = `${cat} ${count}`;
+      chip.onclick = () => { activeCategory = cat; renderChips(); render(); };
+      chipRow.appendChild(chip);
+    });
+  }
 
   function render() {
     const q = search.value.trim().toLowerCase();
-    const matches = catalogue.shapes.filter(s =>
-      !q || s.name.toLowerCase().includes(q) || s.part_num.toLowerCase().includes(q)
-      || s.category.toLowerCase().includes(q));
+    const matches = catalogue.shapes.filter(s => {
+      if (activeCategory !== 'All' && s.category !== activeCategory) return false;
+      return !q || s.name.toLowerCase().includes(q)
+        || s.part_num.toLowerCase().includes(q)
+        || s.category.toLowerCase().includes(q);
+    });
 
     grid.innerHTML = '';
     if (!matches.length) {
-      grid.innerHTML = `<p class="picker-empty font-body">No shapes match "${escapeHtml(search.value)}"</p>`;
+      grid.innerHTML = `<p class="picker-empty font-body">No ${activeCategory === 'All' ? '' : activeCategory.toLowerCase() + ' '}shapes match "${escapeHtml(search.value)}"</p>`;
       return;
     }
 
@@ -86,6 +115,7 @@ export function createShapePicker(catalogue, { value = null, onChange } = {}) {
   }
 
   search.oninput = render;
+  renderChips();
   render();
 
   return {

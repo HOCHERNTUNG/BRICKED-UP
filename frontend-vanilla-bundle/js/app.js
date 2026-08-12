@@ -2933,6 +2933,8 @@
   // js/components/pickers.js
   function createShapePicker(catalogue, { value = null, onChange } = {}) {
     let selected = value || catalogue.shapes[0] && catalogue.shapes[0].type;
+    const categories = [...new Set(catalogue.shapes.map((s) => s.category))].sort();
+    let activeCategory = "All";
     const wrap = document.createElement("div");
     wrap.className = "picker-block";
     wrap.innerHTML = `
@@ -2941,17 +2943,40 @@
       <input type="search" class="picker-search font-body shape-search"
              placeholder="Search shapes or part number..." />
     </div>
+    <div class="category-chips" role="tablist" aria-label="Filter by category"></div>
     <div class="picker-grid shape-grid" role="listbox" aria-label="Part shape"
          data-layout="flat-sorted"></div>
   `;
     const grid = wrap.querySelector(".shape-grid");
     const search = wrap.querySelector(".shape-search");
+    const chipRow = wrap.querySelector(".category-chips");
+    function renderChips() {
+      chipRow.innerHTML = "";
+      ["All", ...categories].forEach((cat) => {
+        const count = cat === "All" ? catalogue.shapes.length : catalogue.shapes.filter((s) => s.category === cat).length;
+        const chip = document.createElement("button");
+        chip.type = "button";
+        chip.className = `category-chip font-display ${cat === activeCategory ? "is-active" : ""}`;
+        chip.setAttribute("role", "tab");
+        chip.setAttribute("aria-selected", String(cat === activeCategory));
+        chip.textContent = `${cat} ${count}`;
+        chip.onclick = () => {
+          activeCategory = cat;
+          renderChips();
+          render();
+        };
+        chipRow.appendChild(chip);
+      });
+    }
     function render() {
       const q = search.value.trim().toLowerCase();
-      const matches = catalogue.shapes.filter((s) => !q || s.name.toLowerCase().includes(q) || s.part_num.toLowerCase().includes(q) || s.category.toLowerCase().includes(q));
+      const matches = catalogue.shapes.filter((s) => {
+        if (activeCategory !== "All" && s.category !== activeCategory) return false;
+        return !q || s.name.toLowerCase().includes(q) || s.part_num.toLowerCase().includes(q) || s.category.toLowerCase().includes(q);
+      });
       grid.innerHTML = "";
       if (!matches.length) {
-        grid.innerHTML = `<p class="picker-empty font-body">No shapes match "${escapeHtml(search.value)}"</p>`;
+        grid.innerHTML = `<p class="picker-empty font-body">No ${activeCategory === "All" ? "" : activeCategory.toLowerCase() + " "}shapes match "${escapeHtml(search.value)}"</p>`;
         return;
       }
       matches.forEach((s) => {
@@ -2980,6 +3005,7 @@
       });
     }
     search.oninput = render;
+    renderChips();
     render();
     return {
       el: wrap,
@@ -3187,7 +3213,12 @@
         }
         triggerInventoryUpdate();
         showToast(`Added ${qty} \xD7 ${p.part_name} to your inventory`);
-        closePanel(panelId);
+        qtyInput.value = "1";
+        submitBtn.disabled = false;
+        submitBtn.textContent = "Added \u2713";
+        setTimeout(() => {
+          submitBtn.textContent = original;
+        }, 1400);
       } catch (err) {
         submitBtn.disabled = false;
         submitBtn.textContent = original;
@@ -3581,6 +3612,7 @@
       container.style.padding = "16px";
       container.style.height = "100%";
       container.style.boxSizing = "border-box";
+      const partTag = resolveColorTag(freshItem);
       container.innerHTML = `
       <div class="part-img-holder" style="width: 100px; height: 100px; display:flex; align-items:center; justify-content:center; background: rgba(255,255,255,0.75); border: 2.5px solid var(--ink-900); border-radius: var(--radius-card); box-shadow: inset 0 2px 5px rgba(0,0,0,0.1); margin-bottom: 8px; box-sizing: border-box; padding: 8px;">
         <img ${partImageAttrs(freshItem, parsed.name)} style="max-width:90%; max-height:90%; object-fit:contain;" />
@@ -3588,10 +3620,13 @@
       <div style="text-align: center; width: 100%;">
         <div style="display:flex; justify-content:center; gap:6px; margin-bottom:6px">
           <span class="part-badge-cat font-display" style="background-color: var(--cream-200); border: 1.5px solid var(--ink-900); border-radius: 4px; padding: 2px 6px; font-size: 0.65rem; font-weight: 800; text-transform: uppercase;">${freshItem.category}</span>
-          <span class="part-badge-color font-display" style="background-color: ${colorStyles.bg}; color: ${colorStyles.text}; border: 1.5px solid var(--ink-900); border-radius: 4px; padding: 2px 6px; font-size: 0.65rem; font-weight: 800; text-transform: uppercase;">${parsed.color}</span>
+          <span class="part-badge-color font-display" style="background-color: ${partTag.hex || colorStyles.bg}; color: ${partTag.hex ? contrastTextFor(partTag.hex) : colorStyles.text}; border: 1.5px solid var(--ink-900); border-radius: 4px; padding: 2px 6px; font-size: 0.65rem; font-weight: 800; text-transform: uppercase;">${partTag.label}</span>
         </div>
         <h4 class="font-display" style="font-size: 0.95rem; margin: 4px 0 2px 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--ink-900);" title="${parsed.name}">${parsed.name}</h4>
-        <p style="font-family: var(--font-body); font-size: 0.8rem; color: var(--grey-600); margin: 0 0 8px 0;">Part ID: <strong>${freshItem.part_id}</strong></p>
+        <p style="font-family: var(--font-body); font-size: 0.78rem; color: var(--grey-600); margin: 0 0 8px 0;">
+          Element <strong>${freshItem.element_id || "\u2014"}</strong>
+          <span style="opacity:0.7"> &middot; Part ${freshItem.part_num || "\u2014"}</span>
+        </p>
         
         <div class="part-card-footer-actions" style="justify-content: center; gap: 12px; display: flex; align-items: center; margin-top: 4px;">
           <div class="qty-picker">

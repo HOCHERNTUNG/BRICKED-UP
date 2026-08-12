@@ -3,7 +3,7 @@ import { showToast } from '../hooks/toast.js';
 import { IS_MOCKED } from '../api/client.js';
 import { getCatalogue, previewPart } from '../api/catalogue.js';
 import { createShapePicker, createColorPicker, createPartPreview } from './pickers.js';
-import { triggerInventoryUpdate, closePanel } from '../hooks/state.js';
+import { triggerInventoryUpdate } from '../hooks/state.js';
 import { MOCK_PARTS, getBrickSvg } from '../api/fixtures.js';
 
 /**
@@ -129,7 +129,16 @@ function build(bodyEl, panelId, catalogue) {
       }
       triggerInventoryUpdate();
       showToast(`Added ${qty} × ${p.part_name} to your inventory`);
-      closePanel(panelId);
+
+      // The panel deliberately stays open. Cataloguing a collection means
+      // adding many pieces in a row, and closing after each one forced the
+      // user to reopen and re-find their place every time. Only the quantity
+      // resets; the shape and colour selection is kept, since consecutive
+      // adds are usually related.
+      qtyInput.value = '1';
+      submitBtn.disabled = false;
+      submitBtn.textContent = 'Added ✓';
+      setTimeout(() => { submitBtn.textContent = original; }, 1400);
     } catch (err) {
       submitBtn.disabled = false;
       submitBtn.textContent = original;

@@ -22,6 +22,7 @@ import { playSound } from '../hooks/sound.js';
 import { getBuildDetail } from '../api/builds.js';
 import { getInventory, updateInventoryItem, deleteInventoryItem } from '../api/inventory.js';
 import { partImageAttrs } from '../api/partImage.js';
+import { resolveColorTag, contrastTextFor } from '../hooks/state.js';
 import { API_BASE_URL, authHeader } from '../api/client.js';
 
 /**
@@ -490,6 +491,10 @@ function renderStandalonePart(body, item, panelId) {
     container.style.height = '100%';
     container.style.boxSizing = 'border-box';
 
+    // Official colour name and true hex from the API, rather than parsing
+    // the colour back out of the part name.
+    const partTag = resolveColorTag(freshItem);
+
     container.innerHTML = `
       <div class="part-img-holder" style="width: 100px; height: 100px; display:flex; align-items:center; justify-content:center; background: rgba(255,255,255,0.75); border: 2.5px solid var(--ink-900); border-radius: var(--radius-card); box-shadow: inset 0 2px 5px rgba(0,0,0,0.1); margin-bottom: 8px; box-sizing: border-box; padding: 8px;">
         <img ${partImageAttrs(freshItem, parsed.name)} style="max-width:90%; max-height:90%; object-fit:contain;" />
@@ -497,10 +502,13 @@ function renderStandalonePart(body, item, panelId) {
       <div style="text-align: center; width: 100%;">
         <div style="display:flex; justify-content:center; gap:6px; margin-bottom:6px">
           <span class="part-badge-cat font-display" style="background-color: var(--cream-200); border: 1.5px solid var(--ink-900); border-radius: 4px; padding: 2px 6px; font-size: 0.65rem; font-weight: 800; text-transform: uppercase;">${freshItem.category}</span>
-          <span class="part-badge-color font-display" style="background-color: ${colorStyles.bg}; color: ${colorStyles.text}; border: 1.5px solid var(--ink-900); border-radius: 4px; padding: 2px 6px; font-size: 0.65rem; font-weight: 800; text-transform: uppercase;">${parsed.color}</span>
+          <span class="part-badge-color font-display" style="background-color: ${partTag.hex || colorStyles.bg}; color: ${partTag.hex ? contrastTextFor(partTag.hex) : colorStyles.text}; border: 1.5px solid var(--ink-900); border-radius: 4px; padding: 2px 6px; font-size: 0.65rem; font-weight: 800; text-transform: uppercase;">${partTag.label}</span>
         </div>
         <h4 class="font-display" style="font-size: 0.95rem; margin: 4px 0 2px 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--ink-900);" title="${parsed.name}">${parsed.name}</h4>
-        <p style="font-family: var(--font-body); font-size: 0.8rem; color: var(--grey-600); margin: 0 0 8px 0;">Part ID: <strong>${freshItem.part_id}</strong></p>
+        <p style="font-family: var(--font-body); font-size: 0.78rem; color: var(--grey-600); margin: 0 0 8px 0;">
+          Element <strong>${freshItem.element_id || '—'}</strong>
+          <span style="opacity:0.7"> &middot; Part ${freshItem.part_num || '—'}</span>
+        </p>
         
         <div class="part-card-footer-actions" style="justify-content: center; gap: 12px; display: flex; align-items: center; margin-top: 4px;">
           <div class="qty-picker">

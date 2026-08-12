@@ -1908,3 +1908,34 @@ input[type=number] {
   text-overflow: ellipsis;
   max-width: 100%;
 }
+
+/* Category filter chips. Replaces in-grid header rows, which each spanned the
+   full width and cost a whole grid line. */
+.category-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  flex: 0 0 auto;
+}
+
+.category-chip {
+  font-size: 0.6rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  padding: 3px 8px;
+  border: 2px solid var(--ink-900);
+  border-radius: 999px;
+  background: var(--white);
+  color: var(--ink-900);
+  cursor: pointer;
+  line-height: 1.3;
+  transition: background-color 0.1s ease, transform 0.08s ease;
+}
+
+.category-chip:hover { transform: translateY(-1px); }
+
+.category-chip.is-active {
+  background: var(--ink-900);
+  color: var(--white);
+}
