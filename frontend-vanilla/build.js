@@ -2,6 +2,7 @@
 const fs = require('fs');
 const path = require('path');
 const { execSync } = require('child_process');
+const crypto = require('crypto');
 
 const srcDir = __dirname;
 const destDir = path.join(srcDir, '..', 'frontend-vanilla-bundle');
@@ -58,11 +59,10 @@ if (fs.existsSync(faviconPath)) {
   fs.copyFileSync(faviconPath, path.join(destDir, 'favicon.png'));
 }
 
-// 5. Modify and copy index.html (remove type="module")
+// 5. Modify and copy index.html (remove type="module") - written AFTER the
+//    bundle exists, so the cache-busting stamp can hash the real output.
 let indexHtml = fs.readFileSync(path.join(srcDir, 'index.html'), 'utf8');
 indexHtml = indexHtml.replace(/<script type="module" src="js\/app\.js[^"]*"><\/script>/i, '<script src="js/app.js"></script>');
-fs.writeFileSync(path.join(destDir, 'index.html'), indexHtml, 'utf8');
-console.log('index.html processed and written.');
 
 // 6. Bundle JavaScript using esbuild
 try {
@@ -76,4 +76,26 @@ try {
   console.error('Error during esbuild bundling:', err.message);
   process.exit(1);
 }
+
+// 7. Cache busting.
+//
+// index.html references css/*.css and js/app.js by bare path. Browsers cache
+// those aggressively, and invalidating CloudFront only clears the CDN - a
+// returning visitor keeps serving the old copy from local cache and sees a
+// stale app after a deploy. Stamping each reference with a hash of the actual
+// file content makes the URL change whenever the content does, so the browser
+// is obliged to refetch, while unchanged files stay cached.
+const stamp = (relPath) => {
+  const full = path.join(destDir, relPath);
+  if (!fs.existsSync(full)) return null;
+  return crypto.createHash('sha1').update(fs.readFileSync(full)).digest('hex').slice(0, 10);
+};
+
+indexHtml = indexHtml.replace(/(href|src)="((?:css|js)\/[^"?]+)"/g, (match, attr, rel) => {
+  const h = stamp(rel);
+  return h ? `${attr}="${rel}?v=${h}"` : match;
+});
+
+fs.writeFileSync(path.join(destDir, 'index.html'), indexHtml, 'utf8');
+console.log('index.html processed and written (assets cache-busted).');
 console.log('Build completed! Files are in: ' + destDir);

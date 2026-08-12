@@ -362,8 +362,8 @@
     const count = Object.keys(state.panels).filter((k) => k.startsWith("standalone-")).length;
     const x = 200 + count * 32 % 400;
     const y = 100 + count * 32 % 300;
-    const width = type === "build" ? 420 : type === "addPart" ? 330 : 310;
-    const height = type === "build" ? 480 : type === "addPart" ? 360 : 250;
+    const width = type === "build" ? 420 : type === "addPart" ? 600 : 310;
+    const height = type === "build" ? 480 : type === "addPart" ? 720 : 250;
     const accentClass = type === "build" ? "border-builds" : "border-inventory";
     const parsed = type === "part" ? parsePartNameAndColor(data.part_name) : null;
     const name = type === "build" ? `Build Reference: ${data.name}` : type === "addPart" ? "Add Piece Manually" : `${parsed ? parsed.name : "Part " + data.part_num}`;
@@ -2941,7 +2941,8 @@
       <input type="search" class="picker-search font-body shape-search"
              placeholder="Search shapes or part number..." />
     </div>
-    <div class="picker-grid shape-grid" role="listbox" aria-label="Part shape"></div>
+    <div class="picker-grid shape-grid" role="listbox" aria-label="Part shape"
+         data-layout="flat-sorted"></div>
   `;
     const grid = wrap.querySelector(".shape-grid");
     const search = wrap.querySelector(".shape-search");
@@ -2953,21 +2954,13 @@
         grid.innerHTML = `<p class="picker-empty font-body">No shapes match "${escapeHtml(search.value)}"</p>`;
         return;
       }
-      let lastCategory = null;
       matches.forEach((s) => {
-        if (s.category !== lastCategory) {
-          lastCategory = s.category;
-          const h = document.createElement("div");
-          h.className = "picker-group-label font-display";
-          h.textContent = s.category;
-          grid.appendChild(h);
-        }
         const btn = document.createElement("button");
         btn.type = "button";
         btn.className = `picker-tile shape-tile ${s.type === selected ? "is-selected" : ""}`;
         btn.setAttribute("role", "option");
         btn.setAttribute("aria-selected", String(s.type === selected));
-        btn.title = `${s.name} - part ${s.part_num}`;
+        btn.title = `${s.name} - ${s.category} - part ${s.part_num}`;
         btn.innerHTML = `
         <span class="shape-tile-img">
           <img ${partImageAttrs({

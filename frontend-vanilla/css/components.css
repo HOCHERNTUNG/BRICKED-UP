@@ -1862,3 +1862,49 @@ input[type=number] {
 }
 
 .add-part-footer .add-part-submit-btn:disabled { opacity: 0.6; cursor: default; }
+
+/* ---------------------------------------------------------------------------
+   Add Part panel sizing.
+   The grids previously carried fixed max-heights and shared the panel evenly,
+   so each showed under two rows and everything looked squashed. They now grow
+   to fill whatever height the panel has, with the shape grid weighted larger
+   because its tiles are taller than a colour swatch.
+   --------------------------------------------------------------------------- */
+.add-part-form > .picker-block:nth-of-type(1) { flex: 1.35 1 0; }   /* shapes */
+.add-part-form > .picker-block:nth-of-type(2) { flex: 1 1 0; }      /* colours */
+
+.add-part-panel .shape-grid,
+.add-part-panel .color-grid {
+  max-height: none;      /* let flex decide; the grid itself scrolls */
+  height: 100%;
+}
+
+/* Slightly denser tiles so more of the catalogue is visible at a glance. */
+.add-part-panel .shape-grid { grid-template-columns: repeat(auto-fill, minmax(78px, 1fr)); }
+.add-part-panel .color-grid { grid-template-columns: repeat(auto-fill, minmax(88px, 1fr)); }
+.add-part-panel .shape-tile-img { height: 38px; }
+
+/* Compact the fixed-height rows so the space goes to the grids instead. */
+.add-part-panel .part-preview { padding: 6px 8px; }
+.add-part-panel .part-preview-img { width: 46px; height: 46px; }
+.add-part-panel .picker-search { height: 26px; }
+
+/* Denser tiles so the whole 20-shape catalogue is within a short scroll,
+   and more weight to the shape grid, whose tiles are taller than a swatch. */
+.add-part-form > .picker-block:nth-of-type(1) { flex: 1.7 1 0; }
+.add-part-panel .shape-grid { grid-template-columns: repeat(auto-fill, minmax(68px, 1fr)); }
+.add-part-panel .shape-tile { padding: 4px 3px; gap: 1px; }
+.add-part-panel .shape-tile-img { height: 30px; }
+.add-part-panel .shape-tile-name { font-size: 0.58rem; }
+.add-part-panel .shape-tile-part { font-size: 0.53rem; }
+.add-part-panel .color-swatch { min-height: 30px; padding: 4px; }
+.add-part-panel .picker-grid { padding: 6px; }
+
+/* Single-line tile names keep every tile the same, shorter height, so the
+   twenty shapes fit in three rows rather than wrapping unpredictably. */
+.add-part-panel .shape-tile-name {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}

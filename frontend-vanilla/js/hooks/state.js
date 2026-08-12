@@ -215,8 +215,12 @@ export function spawnStandalonePanel(type, data) {
   const x = 200 + (count * 32) % 400;
   const y = 100 + (count * 32) % 300;
   
-  const width = type === 'build' ? 420 : (type === 'addPart' ? 330 : 310);
-  const height = type === 'build' ? 480 : (type === 'addPart' ? 360 : 250);
+  // Add Part now holds a shape grid, a colour grid, a preview and a footer,
+  // so 330x360 squashed every one of them. Opens large enough that a few rows
+  // of each grid are visible without scrolling; renderWorkspace clamps this
+  // to the viewport on smaller screens.
+  const width = type === 'build' ? 420 : (type === 'addPart' ? 600 : 310);
+  const height = type === 'build' ? 480 : (type === 'addPart' ? 720 : 250);
   
   const accentClass = type === 'build' ? 'border-builds' : 'border-inventory';
   const parsed = type === 'part' ? parsePartNameAndColor(data.part_name) : null;

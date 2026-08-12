@@ -1,6 +1,7 @@
 // js/components/pickers.js
 //
 // Visual pickers for choosing a part.
+// (shape grid renders a flat, category-sorted list - no header rows)
 //
 // The old controls were two <select> dropdowns listing seven shape names and
 // six colour names. That does not survive contact with a real catalogue:
@@ -36,7 +37,8 @@ export function createShapePicker(catalogue, { value = null, onChange } = {}) {
       <input type="search" class="picker-search font-body shape-search"
              placeholder="Search shapes or part number..." />
     </div>
-    <div class="picker-grid shape-grid" role="listbox" aria-label="Part shape"></div>
+    <div class="picker-grid shape-grid" role="listbox" aria-label="Part shape"
+         data-layout="flat-sorted"></div>
   `;
   const grid = wrap.querySelector('.shape-grid');
   const search = wrap.querySelector('.shape-search');
@@ -53,22 +55,17 @@ export function createShapePicker(catalogue, { value = null, onChange } = {}) {
       return;
     }
 
-    let lastCategory = null;
+    // Sorted by category, but WITHOUT header rows. Each header spanned the
+    // full grid width and forced a line break, so twenty shapes occupied six
+    // rows instead of three and most of the catalogue sat below the fold.
+    // The category is still on the tile's tooltip.
     matches.forEach(s => {
-      if (s.category !== lastCategory) {
-        lastCategory = s.category;
-        const h = document.createElement('div');
-        h.className = 'picker-group-label font-display';
-        h.textContent = s.category;
-        grid.appendChild(h);
-      }
-
       const btn = document.createElement('button');
       btn.type = 'button';
       btn.className = `picker-tile shape-tile ${s.type === selected ? 'is-selected' : ''}`;
       btn.setAttribute('role', 'option');
       btn.setAttribute('aria-selected', String(s.type === selected));
-      btn.title = `${s.name} - part ${s.part_num}`;
+      btn.title = `${s.name} - ${s.category} - part ${s.part_num}`;
       // Line art rather than a colour photo: this control chooses SHAPE, and
       // a coloured thumbnail here would imply the colour is being chosen too.
       btn.innerHTML = `
