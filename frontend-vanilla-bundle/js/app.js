@@ -2488,10 +2488,10 @@
 
   // js/api/builds.js
   var sleep4 = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-  function calculatePctOwned(build) {
+  function calculatePctOwned(build2) {
     let totalRequired = 0;
     let totalOwned = 0;
-    build.parts.forEach((req) => {
+    build2.parts.forEach((req) => {
       totalRequired += req.quantity_required;
       const invItem = mockInventory.find((i) => i.part_id === req.part_id);
       const ownedCount = invItem ? invItem.quantity : 0;
@@ -2510,13 +2510,13 @@
       return await res.json();
     }
     await sleep4(700);
-    return MOCK_BUILDS.map((build) => ({
-      build_id: build.build_id,
-      build_name: build.build_name,
-      description: build.description,
-      difficulty: build.difficulty,
-      hero_image_url: build.hero_image_url,
-      pct_owned: calculatePctOwned(build)
+    return MOCK_BUILDS.map((build2) => ({
+      build_id: build2.build_id,
+      build_name: build2.build_name,
+      description: build2.description,
+      difficulty: build2.difficulty,
+      hero_image_url: build2.hero_image_url,
+      pct_owned: calculatePctOwned(build2)
     }));
   }
   async function getBuildDetail(build_id) {
@@ -2529,11 +2529,11 @@
       return await res.json();
     }
     await sleep4(500);
-    const build = MOCK_BUILDS.find((b) => b.build_id === build_id);
-    if (!build) {
+    const build2 = MOCK_BUILDS.find((b) => b.build_id === build_id);
+    if (!build2) {
       throw new Error(`Build idea ${build_id} not found`);
     }
-    const detailedParts = build.parts.map((req) => {
+    const detailedParts = build2.parts.map((req) => {
       const partRef = MOCK_PARTS.find((p) => p.part_id === req.part_id);
       const invItem = mockInventory.find((i) => i.part_id === req.part_id);
       const quantity_owned = invItem ? invItem.quantity : 0;
@@ -2546,13 +2546,13 @@
       };
     });
     return {
-      build_id: build.build_id,
-      build_name: build.build_name,
-      description: build.description,
-      difficulty: build.difficulty,
-      hero_image_url: build.hero_image_url,
+      build_id: build2.build_id,
+      build_name: build2.build_name,
+      description: build2.description,
+      difficulty: build2.difficulty,
+      hero_image_url: build2.hero_image_url,
       parts: detailedParts,
-      steps: build.steps || []
+      steps: build2.steps || []
     };
   }
 
@@ -2596,24 +2596,24 @@
     }
     const list = document.createElement("div");
     list.className = "builds-list";
-    buildsList.forEach((build) => {
-      const is100Percent = build.pct_owned === 100;
+    buildsList.forEach((build2) => {
+      const is100Percent = build2.pct_owned === 100;
       const card = document.createElement("div");
       card.className = "build-card";
-      card.onclick = () => selectBuild(build.build_id, container);
+      card.onclick = () => selectBuild(build2.build_id, container);
       card.innerHTML = `
-      <img src="${build.hero_image_url}" alt="${build.build_name}" class="build-img" />
+      <img src="${build2.hero_image_url}" alt="${build2.build_name}" class="build-img" />
       <button type="button" class="build-popout-btn popout-btn" title="View Instructions" style="position: absolute; top: 8px; left: 8px; width: 28px; height: 28px; border-radius: 6px; border: 2.5px solid var(--ink-900); background-color: var(--brick-blue); display: flex; align-items: center; justify-content: center; cursor: pointer; z-index: 5; box-shadow: 0 2.5px 0 var(--ink-900)">
         <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--white)" stroke-width="2.5"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
       </button>
       <div class="build-info">
-        <span class="build-difficulty-tag font-display">${build.difficulty}</span>
-        <h4>${build.build_name}</h4>
+        <span class="build-difficulty-tag font-display">${build2.difficulty}</span>
+        <h4>${build2.build_name}</h4>
         
         <div class="progress-container">
-          <div class="progress-bar" style="width: ${build.pct_owned}%; background-color: ${is100Percent ? "var(--brick-green)" : "var(--brick-purple)"}"></div>
+          <div class="progress-bar" style="width: ${build2.pct_owned}%; background-color: ${is100Percent ? "var(--brick-green)" : "var(--brick-purple)"}"></div>
         </div>
-        <span class="pct-text font-display">${build.pct_owned}% of parts owned</span>
+        <span class="pct-text font-display">${build2.pct_owned}% of parts owned</span>
       </div>
       ${is100Percent ? `<span class="build-ready-tag font-display">
              <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline-block;vertical-align:middle;margin-right:2px"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
@@ -2623,9 +2623,9 @@
       card.querySelector(".popout-btn").onclick = (e) => {
         e.stopPropagation();
         spawnStandalonePanel("build", {
-          build_id: build.build_id,
-          name: build.build_name,
-          hero_image_url: build.hero_image_url
+          build_id: build2.build_id,
+          name: build2.build_name,
+          hero_image_url: build2.hero_image_url
         });
       };
       list.appendChild(card);
@@ -2832,134 +2832,375 @@
     activeBuildDetail = null;
   }
 
+  // js/api/catalogue.js
+  var ELEMENT_IMAGE_BASE = "https://cdn.rebrickable.com/media/parts/elements";
+  var cache = null;
+  var inFlight = null;
+  async function getCatalogue() {
+    if (cache) return cache;
+    if (inFlight) return inFlight;
+    inFlight = (async () => {
+      if (IS_MOCKED) {
+        cache = mockCatalogue();
+        return cache;
+      }
+      await ensureFreshToken();
+      const res = await fetch(`${API_BASE_URL}/catalogue`, { headers: { ...authHeader() } });
+      if (!res.ok) throw new Error("Could not load the part catalogue");
+      const data = await res.json();
+      data.shapeByType = new Map(data.shapes.map((s) => [s.type, s]));
+      data.colorById = new Map(data.colors.map((c) => [c.color_id, c]));
+      cache = data;
+      return cache;
+    })().finally(() => {
+      inFlight = null;
+    });
+    return inFlight;
+  }
+  function elementImageUrl(elementId) {
+    return elementId ? `${ELEMENT_IMAGE_BASE}/${elementId}.jpg` : null;
+  }
+  function colorsForShape(catalogue, type) {
+    const shape = catalogue.shapeByType.get(type);
+    if (!shape) return [];
+    return shape.colors.map((id) => catalogue.colorById.get(id)).filter(Boolean);
+  }
+  function elementFor(catalogue, type, colorId) {
+    const shape = catalogue.shapeByType.get(type);
+    return shape ? shape.element_ids[String(colorId)] || null : null;
+  }
+  function previewPart(catalogue, type, colorId) {
+    const shape = catalogue.shapeByType.get(type);
+    const color = catalogue.colorById.get(colorId);
+    if (!shape || !color) return null;
+    const elementId = elementFor(catalogue, type, colorId);
+    return {
+      type,
+      color_id: colorId,
+      element_id: elementId,
+      part_num: shape.part_num,
+      part_name: `${shape.name} (${color.name})`,
+      category: shape.category,
+      color_name: color.name,
+      color_hex: color.hex,
+      reference_image_url: elementImageUrl(elementId),
+      label_image_url: shape.label_image_url,
+      fallback_image_svg: null
+    };
+  }
+  function contrastOn(hex) {
+    const h = String(hex || "").replace("#", "");
+    if (h.length !== 6) return "#22222A";
+    const [r, g, b] = [0, 2, 4].map((i) => parseInt(h.slice(i, i + 2), 16) / 255);
+    const lin = (c) => c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+    const L = 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
+    return L > 0.45 ? "#22222A" : "#FFFFFF";
+  }
+  function mockCatalogue() {
+    const colors = [
+      { color_id: 4, name: "Red", hex: "#D01012" },
+      { color_id: 1, name: "Blue", hex: "#0057A6" },
+      { color_id: 14, name: "Yellow", hex: "#FFD500" },
+      { color_id: 2, name: "Green", hex: "#1E7A34" },
+      { color_id: 72, name: "Dark Bluish Gray", hex: "#5B5B66" },
+      { color_id: 15, name: "White", hex: "#FFFFFF" }
+    ];
+    const shapes = [
+      ["brick-2x4", "2x4 Brick", "Brick", "3001"],
+      ["brick-2x2", "2x2 Brick", "Brick", "3003"],
+      ["plate-1x2", "1x2 Plate", "Plate", "3023"],
+      ["plate-2x2", "2x2 Plate", "Plate", "3022"],
+      ["plate-2x4", "2x4 Plate", "Plate", "3020"],
+      ["slope-2x2", "2x2 Slope 45", "Slope", "3039"],
+      ["technic-1x1", "Technic 1x1 Brick", "Technic", "6541"]
+    ].map(([type, name, category, part_num]) => ({
+      type,
+      name,
+      category,
+      part_num,
+      label_image_url: null,
+      sample_element_id: null,
+      sample_image_url: null,
+      colors: colors.map((c) => c.color_id),
+      element_ids: {}
+    }));
+    const data = { shapes, colors };
+    data.shapeByType = new Map(shapes.map((s) => [s.type, s]));
+    data.colorById = new Map(colors.map((c) => [c.color_id, c]));
+    return data;
+  }
+
+  // js/components/pickers.js
+  function createShapePicker(catalogue, { value = null, onChange } = {}) {
+    let selected = value || catalogue.shapes[0] && catalogue.shapes[0].type;
+    const wrap = document.createElement("div");
+    wrap.className = "picker-block";
+    wrap.innerHTML = `
+    <div class="picker-head">
+      <label class="picker-label font-display">Part Shape</label>
+      <input type="search" class="picker-search font-body shape-search"
+             placeholder="Search shapes or part number..." />
+    </div>
+    <div class="picker-grid shape-grid" role="listbox" aria-label="Part shape"></div>
+  `;
+    const grid = wrap.querySelector(".shape-grid");
+    const search = wrap.querySelector(".shape-search");
+    function render() {
+      const q = search.value.trim().toLowerCase();
+      const matches = catalogue.shapes.filter((s) => !q || s.name.toLowerCase().includes(q) || s.part_num.toLowerCase().includes(q) || s.category.toLowerCase().includes(q));
+      grid.innerHTML = "";
+      if (!matches.length) {
+        grid.innerHTML = `<p class="picker-empty font-body">No shapes match "${escapeHtml(search.value)}"</p>`;
+        return;
+      }
+      let lastCategory = null;
+      matches.forEach((s) => {
+        if (s.category !== lastCategory) {
+          lastCategory = s.category;
+          const h = document.createElement("div");
+          h.className = "picker-group-label font-display";
+          h.textContent = s.category;
+          grid.appendChild(h);
+        }
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = `picker-tile shape-tile ${s.type === selected ? "is-selected" : ""}`;
+        btn.setAttribute("role", "option");
+        btn.setAttribute("aria-selected", String(s.type === selected));
+        btn.title = `${s.name} - part ${s.part_num}`;
+        btn.innerHTML = `
+        <span class="shape-tile-img">
+          <img ${partImageAttrs({
+          reference_image_url: s.label_image_url,
+          label_image_url: s.sample_image_url
+        }, s.name)} />
+        </span>
+        <span class="shape-tile-name font-display">${escapeHtml(s.name)}</span>
+        <span class="shape-tile-part font-body">${escapeHtml(s.part_num)}</span>
+      `;
+        btn.onclick = () => {
+          selected = s.type;
+          render();
+          if (onChange) onChange(selected);
+        };
+        grid.appendChild(btn);
+      });
+    }
+    search.oninput = render;
+    render();
+    return {
+      el: wrap,
+      get: () => selected,
+      set: (t) => {
+        selected = t;
+        render();
+      }
+    };
+  }
+  function createColorPicker(catalogue, { type, value = null, onChange } = {}) {
+    let shapeType = type;
+    let selected = value;
+    const wrap = document.createElement("div");
+    wrap.className = "picker-block";
+    wrap.innerHTML = `
+    <div class="picker-head">
+      <label class="picker-label font-display">Colour <span class="picker-count font-body"></span></label>
+      <input type="search" class="picker-search font-body color-search"
+             placeholder="Search colours..." />
+    </div>
+    <div class="picker-grid color-grid" role="listbox" aria-label="Part colour"></div>
+  `;
+    const grid = wrap.querySelector(".color-grid");
+    const search = wrap.querySelector(".color-search");
+    const count = wrap.querySelector(".picker-count");
+    let ready = false;
+    function render() {
+      const available = colorsForShape(catalogue, shapeType);
+      if (selected != null && !available.some((c) => c.color_id === selected)) {
+        selected = null;
+      }
+      if (selected == null && available.length) {
+        selected = available[0].color_id;
+        if (ready && onChange) onChange(selected);
+      }
+      const q = search.value.trim().toLowerCase();
+      const matches = available.filter((c) => !q || c.name.toLowerCase().includes(q));
+      count.textContent = `(${available.length} available for this shape)`;
+      grid.innerHTML = "";
+      if (!matches.length) {
+        grid.innerHTML = `<p class="picker-empty font-body">No colours match "${escapeHtml(search.value)}"</p>`;
+        return;
+      }
+      matches.forEach((c) => {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = `color-swatch ${c.color_id === selected ? "is-selected" : ""}`;
+        btn.setAttribute("role", "option");
+        btn.setAttribute("aria-selected", String(c.color_id === selected));
+        btn.title = `${c.name} (colour ${c.color_id})`;
+        btn.style.backgroundColor = c.hex;
+        btn.style.color = contrastOn(c.hex);
+        btn.innerHTML = `<span class="color-swatch-name">${escapeHtml(c.name)}</span>`;
+        btn.onclick = () => {
+          selected = c.color_id;
+          render();
+          if (onChange) onChange(selected);
+        };
+        grid.appendChild(btn);
+      });
+    }
+    search.oninput = render;
+    render();
+    ready = true;
+    return {
+      el: wrap,
+      get: () => selected,
+      set: (id) => {
+        selected = id;
+        render();
+      },
+      setShape: (t) => {
+        shapeType = t;
+        render();
+      }
+    };
+  }
+  function createPartPreview(catalogue, { type, colorId } = {}) {
+    const el = document.createElement("div");
+    el.className = "part-preview brick-card";
+    function render(t, cid) {
+      const p = previewPart(catalogue, t, cid);
+      if (!p) {
+        el.innerHTML = `<p class="picker-empty font-body">Choose a shape and colour</p>`;
+        return;
+      }
+      el.innerHTML = `
+      <div class="part-preview-img">
+        <img ${partImageAttrs(p, p.part_name)} />
+      </div>
+      <div class="part-preview-meta">
+        <span class="part-preview-name font-display">${escapeHtml(p.part_name)}</span>
+        <span class="part-preview-ids font-body">
+          Element <strong>${p.element_id ? escapeHtml(p.element_id) : "\u2014"}</strong>
+          &middot; Part ${escapeHtml(p.part_num)}
+        </span>
+      </div>
+    `;
+    }
+    render(type, colorId);
+    return { el, update: render };
+  }
+  function escapeHtml(s) {
+    return String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  }
+
   // js/components/addPart.js
   function renderAddPartPanel(bodyEl, panelId) {
     bodyEl.innerHTML = "";
-    bodyEl.style.padding = "16px";
-    bodyEl.style.boxSizing = "border-box";
-    bodyEl.style.display = "flex";
-    bodyEl.style.flexDirection = "column";
-    bodyEl.style.gap = "12px";
+    bodyEl.className = "panel-body-content add-part-panel";
+    const loading = document.createElement("div");
+    loading.className = "add-part-loading font-body";
+    loading.textContent = "Loading the part catalogue\u2026";
+    bodyEl.appendChild(loading);
+    getCatalogue().then((catalogue) => build(bodyEl, panelId, catalogue)).catch((err) => {
+      bodyEl.innerHTML = "";
+      const msg = document.createElement("p");
+      msg.className = "picker-empty font-body";
+      msg.textContent = err.message || "Could not load the part catalogue.";
+      bodyEl.appendChild(msg);
+    });
+  }
+  function build(bodyEl, panelId, catalogue) {
+    bodyEl.innerHTML = "";
     const form = document.createElement("div");
     form.className = "add-part-form";
-    form.style.display = "flex";
-    form.style.flexDirection = "column";
-    form.style.gap = "12px";
-    form.innerHTML = `
-    <div class="input-group" style="display:flex; flex-direction:column; gap:4px;">
-      <label class="input-label font-display" style="font-size:0.72rem; font-weight:800; text-transform:uppercase; color:var(--ink-900);">Part Shape</label>
-      <select class="part-shape-select font-body" style="width:100%; height:36px; border:2.5px solid var(--ink-900); border-radius:6px; font-weight:800; padding:0 8px; background:var(--white); outline:none; box-sizing:border-box; color:var(--ink-900);">
-        <option value="1x1 Brick|brick-1x1|Brick">1x1 Brick</option>
-        <option value="1x2 Brick|brick-1x2|Brick">1x2 Brick</option>
-        <option value="1x4 Brick|brick-1x4|Brick">1x4 Brick</option>
-        <option value="2x2 Brick|brick-2x2|Brick">2x2 Brick</option>
-        <option value="2x3 Brick|brick-2x3|Brick">2x3 Brick</option>
-        <option value="2x4 Brick|brick-2x4|Brick">2x4 Brick</option>
-        <option value="1x1 Round Brick|brick-1x1-round|Brick">1x1 Round Brick</option>
-        <option value="2x2 Round Brick|brick-2x2-round|Brick">2x2 Round Brick</option>
-        <option value="1x1 Plate|plate-1x1|Plate">1x1 Plate</option>
-        <option value="1x2 Plate|plate-1x2|Plate">1x2 Plate</option>
-        <option value="2x2 Plate|plate-2x2|Plate">2x2 Plate</option>
-        <option value="2x4 Plate|plate-2x4|Plate">2x4 Plate</option>
-        <option value="4x4 Plate|plate-4x4|Plate">4x4 Plate</option>
-        <option value="1x1 Round Plate|plate-1x1-round|Plate">1x1 Round Plate</option>
-        <option value="1x2 Tile|tile-1x2|Tile">1x2 Tile</option>
-        <option value="2x2 Tile|tile-2x2|Tile">2x2 Tile</option>
-        <option value="2x2 Slope 45\xB0|slope-2x2|Slope">2x2 Slope 45\xB0</option>
-        <option value="2x2 Inverted Slope 45\xB0|slope-inv-2x2|Slope">2x2 Inverted Slope 45\xB0</option>
-        <option value="Technic 1x1 Brick|technic-1x1|Technic">Technic 1x1 Brick</option>
-        <option value="Technic 1x2 Brick|technic-1x2|Technic">Technic 1x2 Brick</option>
-      </select>
+    const shapePicker = createShapePicker(catalogue, { onChange: onShapeChange });
+    const colorPicker = createColorPicker(catalogue, {
+      type: shapePicker.get(),
+      onChange: () => refreshPreview()
+    });
+    const preview = createPartPreview(catalogue, {
+      type: shapePicker.get(),
+      colorId: colorPicker.get()
+    });
+    function onShapeChange(type) {
+      colorPicker.setShape(type);
+      refreshPreview();
+    }
+    function refreshPreview() {
+      preview.update(shapePicker.get(), colorPicker.get());
+    }
+    form.appendChild(shapePicker.el);
+    form.appendChild(colorPicker.el);
+    const footer = document.createElement("div");
+    footer.className = "add-part-footer";
+    footer.innerHTML = `
+    <div class="qty-picker add-part-qty">
+      <button type="button" class="manual-qty-btn dec-qty" aria-label="Decrease quantity">-</button>
+      <input type="number" class="manual-qty-val font-body" value="1" min="1" aria-label="Quantity" />
+      <button type="button" class="manual-qty-btn inc-qty" aria-label="Increase quantity">+</button>
     </div>
-
-    <div class="input-group" style="display:flex; flex-direction:column; gap:4px;">
-      <label class="input-label font-display" style="font-size:0.72rem; font-weight:800; text-transform:uppercase; color:var(--ink-900);">Part Color</label>
-      <select class="part-color-select font-body" style="width:100%; height:36px; border:2.5px solid var(--ink-900); border-radius:6px; font-weight:800; padding:0 8px; background:var(--white); outline:none; box-sizing:border-box; color:var(--ink-900);">
-        <option value="Red|#D01012">Red</option>
-        <option value="Blue|#0057A6">Blue</option>
-        <option value="Yellow|#FFD500">Yellow</option>
-        <option value="Green|#1E7A34">Green</option>
-        <option value="Grey|#5B5B66">Grey</option>
-        <option value="White|#FFFFFF">White</option>
-      </select>
-    </div>
-
-    <div class="input-group" style="display:flex; flex-direction:column; gap:4px;">
-      <label class="input-label font-display" style="font-size:0.72rem; font-weight:800; text-transform:uppercase; color:var(--ink-900);">Quantity</label>
-      <div class="qty-picker" style="display:inline-flex; align-items:center; border:2.5px solid var(--ink-900); border-radius:6px; background:var(--white); overflow:hidden; height:32px; width: fit-content;">
-        <button type="button" class="manual-qty-btn dec-qty" style="width:32px; height:100%; border:none; background:transparent; font-size:1.1rem; font-weight:800; cursor:pointer; display:flex; align-items:center; justify-content:center; padding:0; color:var(--ink-900);">-</button>
-        <input type="number" class="manual-qty-val font-body" value="1" style="width:40px; text-align:center; border:none; background:transparent; font-weight:800; outline:none; border-left:2.5px solid var(--ink-900); border-right:2.5px solid var(--ink-900); height:100%; margin:0; color:var(--ink-900); -moz-appearance: textfield;" />
-        <button type="button" class="manual-qty-btn inc-qty" style="width:32px; height:100%; border:none; background:transparent; font-size:1.1rem; font-weight:800; cursor:pointer; display:flex; align-items:center; justify-content:center; padding:0; color:var(--ink-900);">+</button>
-      </div>
-    </div>
-
-    <button type="button" class="brick-btn brick-btn-primary add-part-submit-btn font-display" style="width:100%; margin-top:12px; height:40px; border:2.5px solid var(--ink-900); box-shadow:0 3px 0 var(--ink-900);">Add to Bin</button>
+    <button type="button" class="brick-btn brick-btn-primary add-part-submit-btn font-display">Add to Bin</button>
   `;
-    const decBtn = form.querySelector(".dec-qty");
-    const incBtn = form.querySelector(".inc-qty");
-    const qtyInput = form.querySelector(".manual-qty-val");
-    const submitBtn = form.querySelector(".add-part-submit-btn");
-    decBtn.onclick = () => {
-      let val = parseInt(qtyInput.value);
-      if (isNaN(val) || val <= 1) val = 1;
-      else val--;
-      qtyInput.value = val;
+    form.appendChild(preview.el);
+    form.appendChild(footer);
+    bodyEl.appendChild(form);
+    const qtyInput = footer.querySelector(".manual-qty-val");
+    footer.querySelector(".dec-qty").onclick = () => {
+      qtyInput.value = Math.max(1, (parseInt(qtyInput.value) || 1) - 1);
     };
-    incBtn.onclick = () => {
-      let val = parseInt(qtyInput.value);
-      if (isNaN(val)) val = 1;
-      else val++;
-      qtyInput.value = val;
+    footer.querySelector(".inc-qty").onclick = () => {
+      qtyInput.value = Math.max(1, (parseInt(qtyInput.value) || 1) + 1);
     };
+    const submitBtn = footer.querySelector(".add-part-submit-btn");
     submitBtn.onclick = async () => {
-      const shapeVal = form.querySelector(".part-shape-select").value.split("|");
-      const colorVal = form.querySelector(".part-color-select").value.split("|");
-      const qty = parseInt(qtyInput.value) || 1;
-      const shapeName = shapeVal[0];
-      const shapeType = shapeVal[1];
-      const shapeCategory = shapeVal[2];
-      const colorName = colorVal[0];
-      const colorHex = colorVal[1];
-      const partName = `${shapeName} (${colorName})`;
+      const type = shapePicker.get();
+      const colorId = colorPicker.get();
+      const qty = Math.max(1, parseInt(qtyInput.value) || 1);
+      const p = previewPart(catalogue, type, colorId);
+      if (!p) {
+        showToast("Choose a shape and a colour first.");
+        return;
+      }
+      submitBtn.disabled = true;
+      const original = submitBtn.textContent;
+      submitBtn.textContent = "Adding\u2026";
       try {
         if (IS_MOCKED) {
-          let existingPart = MOCK_PARTS.find((p) => p.type === shapeType && p.color === colorHex);
+          let existing = MOCK_PARTS.find((x) => x.type === type && x.color === p.color_hex);
           let partId;
-          if (existingPart) {
-            partId = existingPart.part_id;
+          if (existing) {
+            partId = existing.part_id;
           } else {
-            partId = Math.max(...MOCK_PARTS.map((p) => p.part_id), 0) + 1;
+            partId = Math.max(...MOCK_PARTS.map((x) => x.part_id), 0) + 1;
             MOCK_PARTS.push({
               part_id: partId,
-              part_name: partName,
-              category: shapeCategory,
-              color: colorHex,
-              type: shapeType,
-              reference_image_url: getBrickSvg(colorHex, shapeType)
+              part_name: p.part_name,
+              category: p.category,
+              color: p.color_hex,
+              type,
+              reference_image_url: getBrickSvg(p.color_hex, type)
             });
           }
-          await addInventoryItem({
-            part_id: partId,
-            quantity: qty,
-            source_image_key: null
-          });
+          await addInventoryItem({ part_id: partId, quantity: qty, source_image_key: null });
         } else {
           await addInventoryItem({
-            type: shapeType,
-            color: colorHex,
-            category: shapeCategory,
+            type,
+            color_id: colorId,
+            category: p.category,
             quantity: qty,
             source_image_key: null
           });
         }
         triggerInventoryUpdate();
-        showToast(`Added ${qty} \xD7 ${shapeName} to your inventory`);
+        showToast(`Added ${qty} \xD7 ${p.part_name} to your inventory`);
         closePanel(panelId);
       } catch (err) {
-        alert("Failed to add part: " + err.message);
+        submitBtn.disabled = false;
+        submitBtn.textContent = original;
+        showToast(err.message || "Could not add that part.");
       }
     };
-    bodyEl.appendChild(form);
   }
 
   // js/components/workspace.js
@@ -3418,7 +3659,7 @@
       body.innerHTML = `<div style="padding:16px; text-align:center; color:var(--brick-red)" class="font-display">Error loading part details.</div>`;
     });
   }
-  function renderStandaloneBuild(body, build) {
+  function renderStandaloneBuild(body, build2) {
     body.style.height = "100%";
     body.style.display = "flex";
     body.style.flexDirection = "column";
@@ -3438,7 +3679,7 @@
     <p class="brick-spinner-message font-display">Retrieving schematic checklist...</p>
   `;
     body.appendChild(spinnerContainer);
-    getBuildDetail(build.build_id).then((detail) => {
+    getBuildDetail(build2.build_id).then((detail) => {
       body.innerHTML = "";
       const detailContent = document.createElement("div");
       detailContent.className = "detail-content-scroll";
