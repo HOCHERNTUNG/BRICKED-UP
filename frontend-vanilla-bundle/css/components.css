@@ -1939,3 +1939,18 @@ input[type=number] {
   background: var(--ink-900);
   color: var(--white);
 }
+
+/* The colour grid is the last flexible block before the preview, so when a
+   shape has few colours the grid still stretched to fill the panel, leaving
+   a large empty box below the swatches. Grids now size to their content and
+   only grow as far as their share of the panel, so short lists look like
+   short lists. */
+.add-part-panel .picker-grid {
+  height: auto;
+  align-content: start;      /* rows pack to the top, no vertical stretch */
+}
+
+.add-part-panel .color-swatch,
+.add-part-panel .shape-tile {
+  align-self: start;         /* a tile never stretches to the row height */
+}
