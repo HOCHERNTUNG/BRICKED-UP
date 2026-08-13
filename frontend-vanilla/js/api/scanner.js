@@ -60,7 +60,7 @@ export async function uploadImage(uploadUrl, file) {
   return { success: true };
 }
 
-export async function scanBrick(key) {
+export async function scanBrick(key, model) {
   if (!IS_MOCKED) {
     await ensureFreshToken();
     const res = await fetch(`${API_BASE_URL}/scanner/scan`, {
@@ -69,7 +69,7 @@ export async function scanBrick(key) {
         'Content-Type': 'application/json',
         ...authHeader()
       },
-      body: JSON.stringify({ key })
+      body: JSON.stringify(model ? { key, model } : { key })
     });
     if (!res.ok) throw await apiError(res, 'Failed to scan brick');
     return await res.json();
@@ -111,7 +111,7 @@ export async function scanBrick(key) {
   };
 }
 
-export async function scanBatch(key) {
+export async function scanBatch(key, model) {
   if (!IS_MOCKED) {
     await ensureFreshToken();
     const res = await fetch(`${API_BASE_URL}/scanner/scan-batch`, {
@@ -120,7 +120,7 @@ export async function scanBatch(key) {
         'Content-Type': 'application/json',
         ...authHeader()
       },
-      body: JSON.stringify({ key })
+      body: JSON.stringify(model ? { key, model } : { key })
     });
     if (!res.ok) throw await apiError(res, 'Failed to scan batch');
     return await res.json();

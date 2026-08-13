@@ -10,6 +10,20 @@ import { partImageAttrs } from '../api/partImage.js';
 
 let scanState = 'idle'; // idle | uploading | scanning | results | error
 let candidates = [];
+
+// Selectable models. An empty id means "whatever the backend has deployed",
+// so the default path is unchanged if the switcher is never touched.
+const MODEL_OPTIONS = [
+  { id: '',    label: 'Default',
+    hint: 'Whichever model is currently deployed' },
+  { id: 'rb1', label: 'Rebrickable',
+    hint: 'Trained on catalogue photographs; the scan is matted onto white to match' },
+  { id: 'rb2', label: 'Rebrickable + viewpoint',
+    hint: 'As Rebrickable, plus perspective warping so the training set is not all one camera angle' },
+  { id: 'v3',  label: 'Original 50-class',
+    hint: 'Trained on the B200C photo dataset. Strong on its own test set, weak on real photos - the domain gap' },
+];
+let selectedModel = '';
 let addedIndices = new Set();
 let errorMsg = '';
 let currentUploadedImageSrc = '';
@@ -114,12 +128,44 @@ function renderIdleState(parent) {
   fileInput.onchange = (e) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
-      const isBatch = file.name.toLowerCase().includes('batch') || file.name.toLowerCase().includes('multi');
-      runDetectionFlow(file, isBatch, parent);
+      // Every upload goes through the batch route.
+      //
+      // This used to switch on the FILENAME - batch only if it contained
+      // "batch" or "multi" - so a phone photo called 20260813_230648.jpg took
+      // the single-brick path and returned exactly one result no matter how
+      // many bricks were in frame. That is the "only ever one result" report,
+      // and it had nothing to do with the model.
+      //
+      // The batch route handles one brick as happily as nine: the detector
+      // finds however many there are. There is no longer any reason for the
+      // user to have to tell us which kind of photo they took.
+      runDetectionFlow(file, true, parent);
     }
   };
 
   container.appendChild(dropzone);
+
+  // Model switcher.
+  //
+  // Three models trained on two different datasets, selectable per scan, so
+  // the same photograph can be put through each in turn. That comparison is
+  // the project's most interesting result and it is far more convincing shown
+  // live than described: v3 scores 0.86 on its own test set and answers
+  // slope-inv-2x2 for almost any real photo, while rb1 is trained on a domain
+  // the scanner can actually normalise a phone photo into.
+  const modelBar = document.createElement('div');
+  modelBar.className = 'model-switch';
+  modelBar.innerHTML = `<span class="model-switch-label font-display">Model</span>`;
+  MODEL_OPTIONS.forEach(m => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = `model-chip font-display ${m.id === selectedModel ? 'is-active' : ''}`;
+    b.title = m.hint;
+    b.textContent = m.label;
+    b.onclick = () => { selectedModel = m.id; renderScanner(parent); };
+    modelBar.appendChild(b);
+  });
+  container.appendChild(modelBar);
 
   // Quick Demo Buttons
   const demoSection = document.createElement('div');
@@ -127,19 +173,21 @@ function renderIdleState(parent) {
   demoSection.innerHTML = `
     <span class="demo-label font-display">Or Try Demo Photos:</span>
     <div class="demo-buttons-grid">
-      <button type="button" class="demo-scan-btn font-display" data-type="red">Sample: 2x4 Brick</button>
-      <button type="button" class="demo-scan-btn font-display" data-type="blue">Sample: 2x4 Plate</button>
+      <button type="button" class="demo-scan-btn font-display" data-type="single">Sample: Single Brick</button>
+      <button type="button" class="demo-scan-btn font-display" data-type="dark">Sample: Dark Surface</button>
       <button type="button" class="demo-scan-btn font-display" data-type="batch">Sample: Multiple Bricks</button>
     </div>
   `;
 
-  // Real photographs shipped with the site. These used to be zero-byte
-  // placeholder File objects, which mock mode never noticed but Rekognition
-  // rejects outright - an empty image is not a valid image.
+  // Real photographs shipped with the site.
+  //
+  // Replaced with photographs taken on a phone of real bricks on a real desk,
+  // because that is what the app is actually for and the previous set was not
+  // representative of it. Every demo now runs the same route an upload does.
   const DEMO_PHOTOS = {
-    red:   'assets/demo/red-brick.jpg',
-    blue:  'assets/demo/blue-plate.jpg',
-    batch: 'assets/demo/batch-bricks.jpg'
+    single: 'assets/demo/single-brick.jpg',
+    dark:   'assets/demo/dark-surface.jpg',
+    batch:  'assets/demo/batch-bricks.jpg'
   };
 
   demoSection.querySelectorAll('[data-type]').forEach(btn => {
@@ -152,7 +200,10 @@ function renderIdleState(parent) {
         if (!res.ok) throw new Error(`Demo photo ${name} is missing`);
         const blob = await res.blob();
         const file = new File([blob], name, { type: 'image/jpeg' });
-        runDetectionFlow(file, type === 'batch', parent);
+        // All demos take the batch route, same as an upload - it handles one
+        // brick as well as nine, and running demos down a different path than
+        // real use is how the single/batch split went unnoticed.
+        runDetectionFlow(file, true, parent);
       } catch (err) {
         errorMsg = err.message || 'Could not load the demo photo.';
         scanState = 'error';
@@ -295,10 +346,10 @@ async function runDetectionFlow(file, isBatch, parent) {
     startMinifigurePopups();
 
     if (isBatch) {
-      const result = await scanBatch(key);
+      const result = await scanBatch(key, selectedModel);
       candidates = result.candidates;
     } else {
-      const result = await scanBrick(key);
+      const result = await scanBrick(key, selectedModel);
       candidates = [result];
     }
 

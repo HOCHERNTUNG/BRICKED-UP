@@ -2147,6 +2147,42 @@ input[type=number] {
   white-space: nowrap;
 }
 
+/* Model switcher. Three models over two datasets, selectable per scan, so the
+   same photo can be run through each in turn - the domain-gap result is much
+   more convincing demonstrated than described. */
+.model-switch {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+  margin: 10px 0 2px;
+}
+
+.model-switch-label {
+  font-size: 0.6rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--grey-600);
+  margin-right: 2px;
+}
+
+.model-chip {
+  font-size: 0.58rem;
+  font-weight: 800;
+  padding: 3px 8px;
+  border: 2px solid var(--ink-900);
+  border-radius: 999px;
+  background: var(--white);
+  color: var(--ink-900);
+  cursor: pointer;
+  line-height: 1.35;
+  transition: background-color 0.1s ease, transform 0.08s ease;
+}
+
+.model-chip:hover { transform: translateY(-1px); }
+.model-chip.is-active { background: var(--ink-900); color: var(--white); }
+
 /* The classifier's next-best guesses, at the top of the correction editor.
    Its mistakes are near-misses - a 1x4 read as a 1x3 - so the fix is usually
    one of these, and scrolling a fifty-tile grid for that is the wrong amount

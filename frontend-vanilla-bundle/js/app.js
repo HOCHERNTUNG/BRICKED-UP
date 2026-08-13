@@ -1721,7 +1721,7 @@
     await sleep2(1e3);
     return { success: true };
   }
-  async function scanBrick(key) {
+  async function scanBrick(key, model) {
     if (!IS_MOCKED) {
       await ensureFreshToken();
       const res = await fetch(`${API_BASE_URL}/scanner/scan`, {
@@ -1730,7 +1730,7 @@
           "Content-Type": "application/json",
           ...authHeader()
         },
-        body: JSON.stringify({ key })
+        body: JSON.stringify(model ? { key, model } : { key })
       });
       if (!res.ok) throw await apiError(res, "Failed to scan brick");
       return await res.json();
@@ -1765,7 +1765,7 @@
       }
     };
   }
-  async function scanBatch(key) {
+  async function scanBatch(key, model) {
     if (!IS_MOCKED) {
       await ensureFreshToken();
       const res = await fetch(`${API_BASE_URL}/scanner/scan-batch`, {
@@ -1774,7 +1774,7 @@
           "Content-Type": "application/json",
           ...authHeader()
         },
-        body: JSON.stringify({ key })
+        body: JSON.stringify(model ? { key, model } : { key })
       });
       if (!res.ok) throw await apiError(res, "Failed to scan batch");
       return await res.json();
@@ -2247,6 +2247,29 @@
   // js/components/scanner.js
   var scanState = "idle";
   var candidates = [];
+  var MODEL_OPTIONS = [
+    {
+      id: "",
+      label: "Default",
+      hint: "Whichever model is currently deployed"
+    },
+    {
+      id: "rb1",
+      label: "Rebrickable",
+      hint: "Trained on catalogue photographs; the scan is matted onto white to match"
+    },
+    {
+      id: "rb2",
+      label: "Rebrickable + viewpoint",
+      hint: "As Rebrickable, plus perspective warping so the training set is not all one camera angle"
+    },
+    {
+      id: "v3",
+      label: "Original 50-class",
+      hint: "Trained on the B200C photo dataset. Strong on its own test set, weak on real photos - the domain gap"
+    }
+  ];
+  var selectedModel = "";
   var addedIndices = /* @__PURE__ */ new Set();
   var errorMsg = "";
   var currentUploadedImageSrc = "";
@@ -2330,24 +2353,39 @@
     fileInput.onchange = (e) => {
       if (e.target.files && e.target.files[0]) {
         const file = e.target.files[0];
-        const isBatch = file.name.toLowerCase().includes("batch") || file.name.toLowerCase().includes("multi");
-        runDetectionFlow(file, isBatch, parent);
+        runDetectionFlow(file, true, parent);
       }
     };
     container.appendChild(dropzone);
+    const modelBar = document.createElement("div");
+    modelBar.className = "model-switch";
+    modelBar.innerHTML = `<span class="model-switch-label font-display">Model</span>`;
+    MODEL_OPTIONS.forEach((m) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = `model-chip font-display ${m.id === selectedModel ? "is-active" : ""}`;
+      b.title = m.hint;
+      b.textContent = m.label;
+      b.onclick = () => {
+        selectedModel = m.id;
+        renderScanner(parent);
+      };
+      modelBar.appendChild(b);
+    });
+    container.appendChild(modelBar);
     const demoSection = document.createElement("div");
     demoSection.className = "demo-scans-section";
     demoSection.innerHTML = `
     <span class="demo-label font-display">Or Try Demo Photos:</span>
     <div class="demo-buttons-grid">
-      <button type="button" class="demo-scan-btn font-display" data-type="red">Sample: 2x4 Brick</button>
-      <button type="button" class="demo-scan-btn font-display" data-type="blue">Sample: 2x4 Plate</button>
+      <button type="button" class="demo-scan-btn font-display" data-type="single">Sample: Single Brick</button>
+      <button type="button" class="demo-scan-btn font-display" data-type="dark">Sample: Dark Surface</button>
       <button type="button" class="demo-scan-btn font-display" data-type="batch">Sample: Multiple Bricks</button>
     </div>
   `;
     const DEMO_PHOTOS = {
-      red: "assets/demo/red-brick.jpg",
-      blue: "assets/demo/blue-plate.jpg",
+      single: "assets/demo/single-brick.jpg",
+      dark: "assets/demo/dark-surface.jpg",
       batch: "assets/demo/batch-bricks.jpg"
     };
     demoSection.querySelectorAll("[data-type]").forEach((btn) => {
@@ -2360,7 +2398,7 @@
           if (!res.ok) throw new Error(`Demo photo ${name} is missing`);
           const blob = await res.blob();
           const file = new File([blob], name, { type: "image/jpeg" });
-          runDetectionFlow(file, type === "batch", parent);
+          runDetectionFlow(file, true, parent);
         } catch (err) {
           errorMsg = err.message || "Could not load the demo photo.";
           scanState = "error";
@@ -2473,10 +2511,10 @@
       renderScanner(parent);
       startMinifigurePopups();
       if (isBatch) {
-        const result = await scanBatch(key);
+        const result = await scanBatch(key, selectedModel);
         candidates = result.candidates;
       } else {
-        const result = await scanBrick(key);
+        const result = await scanBrick(key, selectedModel);
         candidates = [result];
       }
       await new Promise((resolve) => setTimeout(resolve, 3800));
