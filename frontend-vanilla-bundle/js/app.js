@@ -2371,6 +2371,9 @@
     container.appendChild(demoSection);
     parent.appendChild(container);
   }
+  function escapeHtml2(s) {
+    return String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  }
   async function openCorrectionEditor(itemCard, cand, idx, parent) {
     const existing = itemCard.querySelector(".candidate-editor");
     if (existing) {
@@ -2389,6 +2392,34 @@
       return;
     }
     holder.innerHTML = "";
+    const alts = Array.isArray(cand.alternatives) ? cand.alternatives : [];
+    if (alts.length) {
+      const row = document.createElement("div");
+      row.className = "candidate-alts";
+      row.innerHTML = '<span class="candidate-alts-label font-display">Or did you mean</span>';
+      alts.forEach((alt) => {
+        const shape = catalogue.shapeByType.get(alt.type);
+        if (!shape) return;
+        const b = document.createElement("button");
+        b.type = "button";
+        b.className = "candidate-alt font-display";
+        b.title = `${shape.name} - model's next best guess at ${alt.confidence}%`;
+        b.innerHTML = `
+        <img ${partImageAttrs({
+          reference_image_url: shape.label_image_url,
+          label_image_url: shape.sample_image_url
+        }, shape.name)} />
+        <span class="candidate-alt-name">${escapeHtml2(shape.name)}</span>
+        <span class="candidate-alt-conf">${alt.confidence}%</span>`;
+        b.onclick = () => {
+          shapePicker.set(alt.type);
+          colorPicker.setShape(alt.type);
+          syncPreview();
+        };
+        row.appendChild(b);
+      });
+      if (row.children.length > 1) holder.appendChild(row);
+    }
     const shapePicker = createShapePicker(catalogue, {
       value: cand.part.type,
       onChange: (t) => {
@@ -2620,7 +2651,7 @@
   var selectedColor = "All";
   var resizeObserver = null;
   var currentWidthClass = "width-wide";
-  function escapeHtml2(s) {
+  function escapeHtml3(s) {
     return String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
   }
   var RAINBOW = "linear-gradient(135deg,#D01012 0 25%,#FFD500 25% 50%,#1E7A34 50% 75%,#0057A6 75% 100%)";
@@ -2662,7 +2693,7 @@
     <button type="button" class="color-filter-btn font-display" id="inv-color-btn"
             aria-haspopup="dialog" aria-expanded="false">
       <span class="color-filter-dot" style="${dotStyle(active ? active.hex : null)}"></span>
-      <span class="color-filter-label">${selectedColor === "All" ? "Any colour" : escapeHtml2(selectedColor)}</span>
+      <span class="color-filter-label">${selectedColor === "All" ? "Any colour" : escapeHtml3(selectedColor)}</span>
       <svg class="color-filter-caret" width="10" height="10" viewBox="0 0 24 24" fill="none"
            stroke="currentColor" stroke-width="4" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
     </button>
@@ -2815,7 +2846,7 @@
       chip.className = `inv-type-chip font-display ${on ? "is-active" : ""}`;
       chip.setAttribute("role", "tab");
       chip.setAttribute("aria-selected", String(on));
-      chip.innerHTML = `${escapeHtml2(label)} <span class="inv-chip-count">${count}</span>`;
+      chip.innerHTML = `${escapeHtml3(label)} <span class="inv-chip-count">${count}</span>`;
       chip.onclick = () => {
         selectedCategory = label;
         renderInventory(parentEl);

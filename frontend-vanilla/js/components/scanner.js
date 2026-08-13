@@ -175,6 +175,12 @@ function renderIdleState(parent) {
  * whatever is chosen. The card is updated in place; nothing is written until
  * the user presses Add to bin.
  */
+function escapeHtml(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
 async function openCorrectionEditor(itemCard, cand, idx, parent) {
   const existing = itemCard.querySelector('.candidate-editor');
   if (existing) { existing.remove(); return; }      // second click closes it
@@ -193,6 +199,44 @@ async function openCorrectionEditor(itemCard, cand, idx, parent) {
   }
 
   holder.innerHTML = '';
+
+  // The model's runners-up, offered as one-click choices.
+  //
+  // Measured on real photos, the top guess is right about as often as the old
+  // model's was - but the correct shape is in the top three far more often,
+  // and the misses are near-misses: a 1x4 read as a 1x3, a 2x2 read as a 2x2
+  // round. Scrolling a fifty-tile grid to fix a one-stud error is the wrong
+  // amount of work, so the three candidates go at the top and the full picker
+  // stays underneath for when none of them is right.
+  const alts = Array.isArray(cand.alternatives) ? cand.alternatives : [];
+  if (alts.length) {
+    const row = document.createElement('div');
+    row.className = 'candidate-alts';
+    row.innerHTML = '<span class="candidate-alts-label font-display">Or did you mean</span>';
+    alts.forEach(alt => {
+      const shape = catalogue.shapeByType.get(alt.type);
+      if (!shape) return;
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'candidate-alt font-display';
+      b.title = `${shape.name} - model's next best guess at ${alt.confidence}%`;
+      b.innerHTML = `
+        <img ${partImageAttrs({ reference_image_url: shape.label_image_url,
+                                label_image_url: shape.sample_image_url }, shape.name)} />
+        <span class="candidate-alt-name">${escapeHtml(shape.name)}</span>
+        <span class="candidate-alt-conf">${alt.confidence}%</span>`;
+      b.onclick = () => {
+        // Keep the detected colour: colour is resolved separately and is
+        // reliable, so only the shape is being reconsidered here.
+        shapePicker.set(alt.type);
+        colorPicker.setShape(alt.type);
+        syncPreview();
+      };
+      row.appendChild(b);
+    });
+    if (row.children.length > 1) holder.appendChild(row);
+  }
+
   const shapePicker = createShapePicker(catalogue, {
     value: cand.part.type,
     onChange: (t) => { colorPicker.setShape(t); syncPreview(); }

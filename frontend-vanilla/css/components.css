@@ -2147,6 +2147,55 @@ input[type=number] {
   white-space: nowrap;
 }
 
+/* The classifier's next-best guesses, at the top of the correction editor.
+   Its mistakes are near-misses - a 1x4 read as a 1x3 - so the fix is usually
+   one of these, and scrolling a fifty-tile grid for that is the wrong amount
+   of work. The full picker stays below for when none of them is right. */
+.candidate-alts {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 8px;
+  margin-bottom: 8px;
+  background: rgba(255, 213, 0, 0.14);
+  border: 2px dashed var(--ink-900);
+  border-radius: 8px;
+}
+
+.candidate-alts-label {
+  font-size: 0.62rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--grey-600);
+  width: 100%;
+}
+
+.candidate-alt {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 9px 4px 5px;
+  border: 2px solid var(--ink-900);
+  border-radius: 999px;
+  background: var(--white);
+  cursor: pointer;
+  font-size: 0.64rem;
+  font-weight: 800;
+  color: var(--ink-900);
+  transition: transform 0.08s ease;
+}
+
+.candidate-alt:hover { transform: translateY(-1px); }
+.candidate-alt img { width: 22px; height: 22px; object-fit: contain; }
+
+.candidate-alt-conf {
+  font-size: 0.58rem;
+  font-weight: 900;
+  color: var(--grey-600);
+}
+
 /* Part-type filter chips. Replaces a native <select> that showed no counts
    and took two clicks; these show the whole distribution at a glance. */
 .inv-type-chips {
