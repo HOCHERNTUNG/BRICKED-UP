@@ -1660,7 +1660,7 @@
   }
   function loadBitmap(file) {
     if (typeof createImageBitmap === "function") {
-      return createImageBitmap(file);
+      return createImageBitmap(file, { imageOrientation: "from-image" }).catch(() => createImageBitmap(file));
     }
     return new Promise((resolve, reject) => {
       const img = new Image();
