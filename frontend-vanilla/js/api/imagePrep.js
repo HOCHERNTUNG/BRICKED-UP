@@ -61,7 +61,18 @@ export async function toUploadableJpeg(file) {
 
 function loadBitmap(file) {
   if (typeof createImageBitmap === 'function') {
-    return createImageBitmap(file);
+    // imageOrientation: 'from-image' applies the EXIF rotation tag.
+    //
+    // Phone cameras record the sensor image plus an orientation tag rather
+    // than rotating the pixels; six of nine test photos from a real phone
+    // carried orientation 6 (rotate 90 degrees). The default here has varied
+    // across browser versions, so an upload could arrive at the classifier
+    // lying on its side. Shape training includes quarter-turns, so this was
+    // survivable for classification, but it also rotated the segmentation's
+    // idea of where the image borders are - and the preview the user saw did
+    // not match the bytes being scanned.
+    return createImageBitmap(file, { imageOrientation: 'from-image' })
+      .catch(() => createImageBitmap(file));
   }
   // Safari fallback
   return new Promise((resolve, reject) => {
