@@ -106,24 +106,80 @@ export function renderInventory(parentEl) {
   };
   headerSearch.appendChild(selectBox);
 
-  // Color select
+  // Colour filter.
+  //
+  // Was a plain <select> whose options came from parsing the colour back out
+  // of each part name - so it listed our informal labels and showed no hint
+  // of what any colour actually looks like. It now lists the official colour
+  // names the API returns, each with its true swatch, in a popover. Native
+  // <option> elements cannot be styled with a colour reliably across
+  // browsers, which is why this is a button plus popover rather than a
+  // dressed-up select.
   const colorSelectBox = document.createElement('div');
-  colorSelectBox.className = 'category-select-wrapper color-select-wrapper';
-  
-  const colors = ['All', ...new Set(inventoryItems.map(i => parsePartNameAndColor(i.part_name).color))];
-  let colorOptions = colors.map(col => `<option value="${col}" ${selectedColor === col ? 'selected' : ''}>Colour: ${col}</option>`).join('');
+  colorSelectBox.className = 'category-select-wrapper color-filter-wrapper';
 
+  const invColors = [];
+  const seenColors = new Set();
+  inventoryItems.forEach(i => {
+    const tag = resolveColorTag(i);
+    if (tag.label && !seenColors.has(tag.label)) {
+      seenColors.add(tag.label);
+      invColors.push(tag);
+    }
+  });
+  invColors.sort((a, b) => a.label.localeCompare(b.label));
+
+  const activeTag = invColors.find(c => c.label === selectedColor);
   colorSelectBox.innerHTML = `
-    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" class="filter-icon"><path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5C6 11.1 5 13 5 15a7 7 0 0 0 7 7z" fill="currentColor"></path></svg>
-    <select class="category-select font-display" id="inv-color-select">
-      ${colorOptions}
-    </select>
+    <button type="button" class="color-filter-btn font-display" id="inv-color-btn"
+            aria-haspopup="listbox" aria-expanded="false">
+      <span class="color-filter-dot" style="background:${activeTag ? activeTag.hex || '#CCC' : 'transparent'};
+            ${activeTag ? '' : 'background:linear-gradient(135deg,#D01012 0 25%,#FFD500 25% 50%,#1E7A34 50% 75%,#0057A6 75% 100%);'}"></span>
+      <span class="color-filter-label">${selectedColor === 'All' ? 'All colours' : selectedColor}</span>
+    </button>
+    <div class="color-filter-pop" hidden role="listbox" aria-label="Filter by colour"></div>
   `;
-  const colorSelect = colorSelectBox.querySelector('#inv-color-select');
-  colorSelect.onchange = (e) => {
-    selectedColor = e.target.value;
-    renderListBody(container);
+  const colorBtn = colorSelectBox.querySelector('#inv-color-btn');
+  const colorPop = colorSelectBox.querySelector('.color-filter-pop');
+
+  function renderColorPop() {
+    colorPop.innerHTML = '';
+    const mkOption = (label, hex) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = `color-filter-option ${selectedColor === label ? 'is-selected' : ''}`;
+      b.setAttribute('role', 'option');
+      b.innerHTML = `<span class="color-filter-dot" style="background:${hex || 'transparent'};
+        ${hex ? '' : 'background:linear-gradient(135deg,#D01012 0 25%,#FFD500 25% 50%,#1E7A34 50% 75%,#0057A6 75% 100%);'}"></span>
+        <span>${label}</span>`;
+      b.onclick = () => {
+        selectedColor = label;
+        colorPop.hidden = true;
+        colorBtn.setAttribute('aria-expanded', 'false');
+        renderInventory(parentEl);
+      };
+      return b;
+    };
+    colorPop.appendChild(mkOption('All', null));
+    invColors.forEach(c => colorPop.appendChild(mkOption(c.label, c.hex)));
+  }
+  renderColorPop();
+
+  colorBtn.onclick = (e) => {
+    e.stopPropagation();
+    const open = colorPop.hidden;
+    colorPop.hidden = !open;
+    colorBtn.setAttribute('aria-expanded', String(open));
   };
+  // Any click elsewhere dismisses it, so the popover cannot be left hanging
+  // over the workspace.
+  document.addEventListener('click', () => {
+    if (!colorPop.hidden) {
+      colorPop.hidden = true;
+      colorBtn.setAttribute('aria-expanded', 'false');
+    }
+  }, { once: true });
+
   headerSearch.appendChild(colorSelectBox);
 
   container.appendChild(headerSearch);
@@ -186,10 +242,16 @@ function renderListBody(container) {
   listPlaceholder.innerHTML = '';
 
   const filtered = inventoryItems.filter(item => {
-    const parsed = parsePartNameAndColor(item.part_name);
-    const matchesSearch = parsed.name.toLowerCase().includes(searchQuery.toLowerCase());
+    const q = searchQuery.trim().toLowerCase();
+    const tag = resolveColorTag(item);
+    // Search across the full name, the colour and the element id - the id is
+    // how a part is identified everywhere else in the app, so it should be
+    // searchable here too.
+    const haystack = [item.part_name, tag.label, item.element_id, item.part_num]
+      .filter(Boolean).join(' ').toLowerCase();
+    const matchesSearch = !q || haystack.includes(q);
     const matchesCat = selectedCategory === 'All' || item.category === selectedCategory;
-    const matchesColor = selectedColor === 'All' || parsed.color === selectedColor;
+    const matchesColor = selectedColor === 'All' || tag.label === selectedColor;
     return matchesSearch && matchesCat && matchesColor;
   });
 

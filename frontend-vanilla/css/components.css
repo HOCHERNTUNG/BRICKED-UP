@@ -2014,3 +2014,110 @@ input[type=number] {
   justify-content: center;
   margin-top: 1px;
 }
+
+/* Inline correction editor on a scan result. Reuses the manual-cataloguing
+   pickers, so a correction is made with the same controls and the same
+   guarantee that the chosen combination is a real element. */
+.candidate-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 10px;
+  padding: 10px;
+  border-top: 2px dashed var(--ink-900);
+}
+
+.candidate-editor .picker-grid { max-height: 132px; }
+.candidate-editor .shape-grid { grid-template-columns: repeat(auto-fill, minmax(68px, 1fr)); }
+.candidate-editor .color-grid { grid-template-columns: repeat(auto-fill, minmax(88px, 1fr)); }
+.candidate-editor .shape-tile-img { height: 28px; }
+.candidate-editor .shape-tile-name { font-size: 0.56rem; }
+.candidate-editor .color-swatch { min-height: 28px; padding: 4px; }
+
+.candidate-editor-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.confidence-badge.corrected {
+  background-color: rgba(0, 87, 166, 0.12);
+  border-color: var(--brick-blue, #0057A6);
+  color: var(--brick-blue, #0057A6);
+}
+
+.candidate-actions { gap: 6px; }
+
+/* Inventory colour filter: a swatch button that opens a list of the colours
+   actually present in the bin, each with its real colour. Native <option>
+   elements cannot carry a reliable background colour across browsers, which
+   is why this is a button and popover rather than a styled <select>. */
+.color-filter-wrapper { position: relative; }
+
+.color-filter-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 10px 0 6px;
+  background: var(--white);
+  border: 2px solid var(--ink-900);
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.66rem;
+  font-weight: 800;
+  color: var(--ink-900);
+  max-width: 150px;
+}
+
+.color-filter-dot {
+  width: 13px;
+  height: 13px;
+  border-radius: 3px;
+  border: 1.5px solid var(--ink-900);
+  flex-shrink: 0;
+}
+
+.color-filter-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.color-filter-pop {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 40;
+  min-width: 168px;
+  max-height: 230px;
+  overflow-y: auto;
+  background: var(--white);
+  border: 2.5px solid var(--ink-900);
+  border-radius: 8px;
+  box-shadow: 0 4px 0 var(--ink-900);
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.color-filter-option {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: 100%;
+  padding: 5px 7px;
+  border: none;
+  border-radius: 5px;
+  background: transparent;
+  cursor: pointer;
+  font-family: var(--font-display);
+  font-size: 0.66rem;
+  font-weight: 700;
+  color: var(--ink-900);
+  text-align: left;
+}
+
+.color-filter-option:hover { background: var(--cream-100); }
+.color-filter-option.is-selected { background: var(--ink-900); color: var(--white); }

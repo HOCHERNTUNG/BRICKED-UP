@@ -1,5 +1,7 @@
 import { getUploadUrl, uploadImage, scanBrick, scanBatch } from '../api/scanner.js';
 import { showToast, pluralParts } from '../hooks/toast.js';
+import { getCatalogue, previewPart } from '../api/catalogue.js';
+import { createShapePicker, createColorPicker, createPartPreview } from './pickers.js';
 import { addInventoryItem } from '../api/inventory.js';
 import { triggerInventoryUpdate } from '../hooks/state.js';
 
@@ -163,6 +165,78 @@ function renderIdleState(parent) {
   parent.appendChild(container);
 }
 
+
+/**
+ * Inline editor for a scan result.
+ *
+ * Opens the same shape and colour pickers the manual Add Part panel uses, so
+ * a correction is made with identical controls and identical guarantees -
+ * only colours the shape genuinely exists in, and a real element behind
+ * whatever is chosen. The card is updated in place; nothing is written until
+ * the user presses Add to bin.
+ */
+async function openCorrectionEditor(itemCard, cand, idx, parent) {
+  const existing = itemCard.querySelector('.candidate-editor');
+  if (existing) { existing.remove(); return; }      // second click closes it
+
+  const holder = document.createElement('div');
+  holder.className = 'candidate-editor';
+  holder.innerHTML = '<p class="picker-empty font-body">Loading the catalogue…</p>';
+  itemCard.appendChild(holder);
+
+  let catalogue;
+  try {
+    catalogue = await getCatalogue();
+  } catch (err) {
+    holder.innerHTML = '<p class="picker-empty font-body">Could not load the catalogue.</p>';
+    return;
+  }
+
+  holder.innerHTML = '';
+  const shapePicker = createShapePicker(catalogue, {
+    value: cand.part.type,
+    onChange: (t) => { colorPicker.setShape(t); syncPreview(); }
+  });
+  const colorPicker = createColorPicker(catalogue, {
+    type: cand.part.type,
+    value: cand.part.color_id,
+    onChange: () => syncPreview()
+  });
+  const preview = createPartPreview(catalogue, {
+    type: cand.part.type, colorId: cand.part.color_id
+  });
+  function syncPreview() {
+    preview.update(shapePicker.get(), colorPicker.get());
+  }
+
+  const actions = document.createElement('div');
+  actions.className = 'candidate-editor-actions';
+  actions.innerHTML = `
+    <button type="button" class="brick-btn brick-btn-small editor-cancel">Cancel</button>
+    <button type="button" class="brick-btn brick-btn-primary brick-btn-small editor-apply">Use this part</button>
+  `;
+
+  holder.appendChild(shapePicker.el);
+  holder.appendChild(colorPicker.el);
+  holder.appendChild(preview.el);
+  holder.appendChild(actions);
+
+  actions.querySelector('.editor-cancel').onclick = () => holder.remove();
+  actions.querySelector('.editor-apply').onclick = () => {
+    const chosen = previewPart(catalogue, shapePicker.get(), colorPicker.get());
+    if (!chosen) { showToast('Pick a shape and a colour first.'); return; }
+
+    // Replace the detection with the user's choice. `corrected` tells the
+    // add handler to resolve by type+colour rather than the original
+    // part_id, and clears the confidence score - it described the model's
+    // guess, not this.
+    cand.part = { ...cand.part, ...chosen };
+    cand.corrected = true;
+    showToast(`Set to ${chosen.part_name}`);
+    renderResults(parent);
+  };
+}
+
 async function runDetectionFlow(file, isBatch, parent) {
   try {
     currentUploadedImageSrc = URL.createObjectURL(file);
@@ -258,11 +332,11 @@ function renderResults(parent) {
     addAllBtn.onclick = async () => {
       const promises = candidates.map(async (cand, idx) => {
         if (!addedIndices.has(idx)) {
-          await addInventoryItem({
-            part_id: cand.part.part_id,
-            quantity: 1,
-            source_image_key: cand.label,
-          });
+          // Honour any correction the user made before bulk-adding.
+          await addInventoryItem(cand.corrected
+            ? { type: cand.part.type, color_id: cand.part.color_id,
+                quantity: 1, source_image_key: cand.label }
+            : { part_id: cand.part.part_id, quantity: 1, source_image_key: cand.label });
           addedIndices.add(idx);
         }
       });
@@ -307,7 +381,9 @@ function renderResults(parent) {
           <div class="candidate-info-wrapper">
             <div class="candidate-header-row">
               <span class="candidate-category font-display">${cand.part.category}</span>
-              <span class="confidence-badge ${cand.confidence > 90 ? 'high' : ''}">${cand.confidence}% Match</span>
+              ${cand.corrected
+                ? `<span class="confidence-badge corrected" title="You changed this result">Corrected</span>`
+                : `<span class="confidence-badge ${cand.confidence > 90 ? 'high' : ''}">${cand.confidence}% Match</span>`}
             </div>
             <h5 class="candidate-name font-display">${cand.part.part_name}</h5>
             
@@ -317,7 +393,9 @@ function renderResults(parent) {
                      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:middle;margin-right:4px"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
                      Added to Bin
                    </div>`
-                : `<button type="button" class="brick-btn brick-btn-primary brick-btn-small add-to-bin-btn">Add to bin</button>`
+                : `<button type="button" class="brick-btn brick-btn-small correct-btn"
+                           title="Change the detected shape or colour">Correct</button>
+                   <button type="button" class="brick-btn brick-btn-primary brick-btn-small add-to-bin-btn">Add to bin</button>`
               }
             </div>
           </div>
@@ -325,16 +403,29 @@ function renderResults(parent) {
       </div>
     `;
 
+    // Correcting a detection.
+    //
+    // The classifier is good but not perfect, and its single largest
+    // confusion - a brick against a plate of the same footprint - is exactly
+    // the one a person spots instantly. Letting the user fix it here means a
+    // wrong guess never has to reach their inventory, and the correction uses
+    // the same pickers as manual cataloguing.
+    const correctBtn = itemCard.querySelector('.correct-btn');
+    if (correctBtn) {
+      correctBtn.onclick = () => openCorrectionEditor(itemCard, cand, idx, parent);
+    }
+
     // Bind Add to Bin action
     const addBtn = itemCard.querySelector('.add-to-bin-btn');
     if (addBtn) {
       addBtn.onclick = async () => {
         try {
-          await addInventoryItem({
-            part_id: cand.part.part_id,
-            quantity: 1,
-            source_image_key: cand.label,
-          });
+          // A corrected candidate carries type + color_id and no part_id, so
+          // the server resolves it exactly as it would a manual add.
+          await addInventoryItem(cand.corrected
+            ? { type: cand.part.type, color_id: cand.part.color_id,
+                quantity: 1, source_image_key: cand.label }
+            : { part_id: cand.part.part_id, quantity: 1, source_image_key: cand.label });
           addedIndices.add(idx);
           triggerInventoryUpdate();
           showToast(`Added ${cand.part.part_name} to your inventory`);

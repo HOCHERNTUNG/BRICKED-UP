@@ -1815,6 +1815,313 @@
     return `${n} part${n === 1 ? "" : "s"}`;
   }
 
+  // js/api/catalogue.js
+  var ELEMENT_IMAGE_BASE = "https://cdn.rebrickable.com/media/parts/elements";
+  var cache = null;
+  var inFlight = null;
+  async function getCatalogue() {
+    if (cache) return cache;
+    if (inFlight) return inFlight;
+    inFlight = (async () => {
+      if (IS_MOCKED) {
+        cache = mockCatalogue();
+        return cache;
+      }
+      await ensureFreshToken();
+      const res = await fetch(`${API_BASE_URL}/catalogue`, { headers: { ...authHeader() } });
+      if (!res.ok) throw new Error("Could not load the part catalogue");
+      const data = await res.json();
+      data.shapeByType = new Map(data.shapes.map((s) => [s.type, s]));
+      data.colorById = new Map(data.colors.map((c) => [c.color_id, c]));
+      cache = data;
+      return cache;
+    })().finally(() => {
+      inFlight = null;
+    });
+    return inFlight;
+  }
+  function elementImageUrl(elementId) {
+    return elementId ? `${ELEMENT_IMAGE_BASE}/${elementId}.jpg` : null;
+  }
+  function colorsForShape(catalogue, type) {
+    const shape = catalogue.shapeByType.get(type);
+    if (!shape) return [];
+    return shape.colors.map((id) => catalogue.colorById.get(id)).filter(Boolean);
+  }
+  function elementFor(catalogue, type, colorId) {
+    const shape = catalogue.shapeByType.get(type);
+    return shape ? shape.element_ids[String(colorId)] || null : null;
+  }
+  function previewPart(catalogue, type, colorId) {
+    const shape = catalogue.shapeByType.get(type);
+    const color = catalogue.colorById.get(colorId);
+    if (!shape || !color) return null;
+    const elementId = elementFor(catalogue, type, colorId);
+    return {
+      type,
+      color_id: colorId,
+      element_id: elementId,
+      part_num: shape.part_num,
+      part_name: `${shape.name} (${color.name})`,
+      category: shape.category,
+      color_name: color.name,
+      color_hex: color.hex,
+      reference_image_url: elementImageUrl(elementId),
+      label_image_url: shape.label_image_url,
+      fallback_image_svg: null
+    };
+  }
+  function contrastOn(hex) {
+    const h = String(hex || "").replace("#", "");
+    if (h.length !== 6) return "#22222A";
+    const [r, g, b] = [0, 2, 4].map((i) => parseInt(h.slice(i, i + 2), 16) / 255);
+    const lin = (c) => c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+    const L = 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
+    return L > 0.45 ? "#22222A" : "#FFFFFF";
+  }
+  function mockCatalogue() {
+    const colors = [
+      { color_id: 4, name: "Red", hex: "#D01012" },
+      { color_id: 1, name: "Blue", hex: "#0057A6" },
+      { color_id: 14, name: "Yellow", hex: "#FFD500" },
+      { color_id: 2, name: "Green", hex: "#1E7A34" },
+      { color_id: 72, name: "Dark Bluish Gray", hex: "#5B5B66" },
+      { color_id: 15, name: "White", hex: "#FFFFFF" }
+    ];
+    const shapes = [
+      ["brick-2x4", "2x4 Brick", "Brick", "3001"],
+      ["brick-2x2", "2x2 Brick", "Brick", "3003"],
+      ["plate-1x2", "1x2 Plate", "Plate", "3023"],
+      ["plate-2x2", "2x2 Plate", "Plate", "3022"],
+      ["plate-2x4", "2x4 Plate", "Plate", "3020"],
+      ["slope-2x2", "2x2 Slope 45", "Slope", "3039"],
+      ["technic-1x1", "Technic 1x1 Brick", "Technic", "6541"]
+    ].map(([type, name, category, part_num]) => ({
+      type,
+      name,
+      category,
+      part_num,
+      label_image_url: null,
+      sample_element_id: null,
+      sample_image_url: null,
+      colors: colors.map((c) => c.color_id),
+      element_ids: {}
+    }));
+    const data = { shapes, colors };
+    data.shapeByType = new Map(shapes.map((s) => [s.type, s]));
+    data.colorById = new Map(colors.map((c) => [c.color_id, c]));
+    return data;
+  }
+
+  // js/api/partImage.js
+  function partImageAttrs(part, alt = "") {
+    const chain = [
+      part?.reference_image_url,
+      part?.fallback_image_svg,
+      part?.label_image_url
+    ].filter(Boolean);
+    if (chain.length === 0) return `src="" alt="${escapeAttr(alt)}"`;
+    const rest = chain.slice(1).map(encodeForAttr);
+    const onerror = rest.length ? ` onerror="${buildFallbackChain(rest)}"` : "";
+    return `src="${chain[0]}"${onerror} alt="${escapeAttr(alt)}"`;
+  }
+  function buildFallbackChain(sources) {
+    let handler = "this.onerror=null;";
+    for (let i = sources.length - 1; i >= 0; i--) {
+      handler = i === sources.length - 1 ? `this.onerror=null; this.src='${sources[i]}';` : `this.onerror=function(){${handler}}; this.src='${sources[i]}';`;
+    }
+    return handler;
+  }
+  function encodeForAttr(url) {
+    return String(url).replace(/'/g, "%27");
+  }
+  function escapeAttr(s) {
+    return String(s).replace(/"/g, "&quot;");
+  }
+
+  // js/components/pickers.js
+  function createShapePicker(catalogue, { value = null, onChange } = {}) {
+    let selected = value || catalogue.shapes[0] && catalogue.shapes[0].type;
+    const categories = [...new Set(catalogue.shapes.map((s) => s.category))].sort();
+    let activeCategory = "All";
+    const wrap = document.createElement("div");
+    wrap.className = "picker-block";
+    wrap.innerHTML = `
+    <div class="picker-head">
+      <label class="picker-label font-display">Part Shape</label>
+      <input type="search" class="picker-search font-body shape-search"
+             placeholder="Search shapes or part number..." />
+    </div>
+    <div class="category-chips" role="tablist" aria-label="Filter by category"></div>
+    <div class="picker-grid shape-grid" role="listbox" aria-label="Part shape"
+         data-layout="flat-sorted"></div>
+  `;
+    const grid = wrap.querySelector(".shape-grid");
+    const search = wrap.querySelector(".shape-search");
+    const chipRow = wrap.querySelector(".category-chips");
+    function renderChips() {
+      chipRow.innerHTML = "";
+      ["All", ...categories].forEach((cat) => {
+        const count = cat === "All" ? catalogue.shapes.length : catalogue.shapes.filter((s) => s.category === cat).length;
+        const chip = document.createElement("button");
+        chip.type = "button";
+        chip.className = `category-chip font-display ${cat === activeCategory ? "is-active" : ""}`;
+        chip.setAttribute("role", "tab");
+        chip.setAttribute("aria-selected", String(cat === activeCategory));
+        chip.textContent = `${cat} ${count}`;
+        chip.onclick = () => {
+          activeCategory = cat;
+          renderChips();
+          render();
+        };
+        chipRow.appendChild(chip);
+      });
+    }
+    function render() {
+      const q = search.value.trim().toLowerCase();
+      const matches = catalogue.shapes.filter((s) => {
+        if (activeCategory !== "All" && s.category !== activeCategory) return false;
+        return !q || s.name.toLowerCase().includes(q) || s.part_num.toLowerCase().includes(q) || s.category.toLowerCase().includes(q);
+      });
+      grid.innerHTML = "";
+      if (!matches.length) {
+        grid.innerHTML = `<p class="picker-empty font-body">No ${activeCategory === "All" ? "" : activeCategory.toLowerCase() + " "}shapes match "${escapeHtml(search.value)}"</p>`;
+        return;
+      }
+      matches.forEach((s) => {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = `picker-tile shape-tile ${s.type === selected ? "is-selected" : ""}`;
+        btn.setAttribute("role", "option");
+        btn.setAttribute("aria-selected", String(s.type === selected));
+        btn.title = `${s.name} - ${s.category} - part ${s.part_num}`;
+        btn.innerHTML = `
+        <span class="shape-tile-img">
+          <img ${partImageAttrs({
+          reference_image_url: s.label_image_url,
+          label_image_url: s.sample_image_url
+        }, s.name)} />
+        </span>
+        <span class="shape-tile-name font-display">${escapeHtml(s.name)}</span>
+        <span class="shape-tile-part font-body">${escapeHtml(s.part_num)}</span>
+      `;
+        btn.onclick = () => {
+          selected = s.type;
+          render();
+          if (onChange) onChange(selected);
+        };
+        grid.appendChild(btn);
+      });
+    }
+    search.oninput = render;
+    renderChips();
+    render();
+    return {
+      el: wrap,
+      get: () => selected,
+      set: (t) => {
+        selected = t;
+        render();
+      }
+    };
+  }
+  function createColorPicker(catalogue, { type, value = null, onChange } = {}) {
+    let shapeType = type;
+    let selected = value;
+    const wrap = document.createElement("div");
+    wrap.className = "picker-block";
+    wrap.innerHTML = `
+    <div class="picker-head">
+      <label class="picker-label font-display">Colour <span class="picker-count font-body"></span></label>
+      <input type="search" class="picker-search font-body color-search"
+             placeholder="Search colours..." />
+    </div>
+    <div class="picker-grid color-grid" role="listbox" aria-label="Part colour"></div>
+  `;
+    const grid = wrap.querySelector(".color-grid");
+    const search = wrap.querySelector(".color-search");
+    const count = wrap.querySelector(".picker-count");
+    let ready = false;
+    function render() {
+      const available = colorsForShape(catalogue, shapeType);
+      if (selected != null && !available.some((c) => c.color_id === selected)) {
+        selected = null;
+      }
+      if (selected == null && available.length) {
+        selected = available[0].color_id;
+        if (ready && onChange) onChange(selected);
+      }
+      const q = search.value.trim().toLowerCase();
+      const matches = available.filter((c) => !q || c.name.toLowerCase().includes(q));
+      count.textContent = `(${available.length} available for this shape)`;
+      grid.innerHTML = "";
+      if (!matches.length) {
+        grid.innerHTML = `<p class="picker-empty font-body">No colours match "${escapeHtml(search.value)}"</p>`;
+        return;
+      }
+      matches.forEach((c) => {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = `color-swatch ${c.color_id === selected ? "is-selected" : ""}`;
+        btn.setAttribute("role", "option");
+        btn.setAttribute("aria-selected", String(c.color_id === selected));
+        btn.title = `${c.name} (colour ${c.color_id})`;
+        btn.style.backgroundColor = c.hex;
+        btn.style.color = contrastOn(c.hex);
+        btn.innerHTML = `<span class="color-swatch-name">${escapeHtml(c.name)}</span>`;
+        btn.onclick = () => {
+          selected = c.color_id;
+          render();
+          if (onChange) onChange(selected);
+        };
+        grid.appendChild(btn);
+      });
+    }
+    search.oninput = render;
+    render();
+    ready = true;
+    return {
+      el: wrap,
+      get: () => selected,
+      set: (id) => {
+        selected = id;
+        render();
+      },
+      setShape: (t) => {
+        shapeType = t;
+        render();
+      }
+    };
+  }
+  function createPartPreview(catalogue, { type, colorId } = {}) {
+    const el = document.createElement("div");
+    el.className = "part-preview brick-card";
+    function render(t, cid) {
+      const p = previewPart(catalogue, t, cid);
+      if (!p) {
+        el.innerHTML = `<p class="picker-empty font-body">Choose a shape and colour</p>`;
+        return;
+      }
+      el.innerHTML = `
+      <div class="part-preview-img">
+        <img ${partImageAttrs(p, p.part_name)} />
+      </div>
+      <div class="part-preview-meta">
+        <span class="part-preview-name font-display">${escapeHtml(p.part_name)}</span>
+        <span class="part-preview-ids font-body">
+          Element <strong>${p.element_id ? escapeHtml(p.element_id) : "\u2014"}</strong>
+          &middot; Part ${escapeHtml(p.part_num)}
+        </span>
+      </div>
+    `;
+    }
+    render(type, colorId);
+    return { el, update: render };
+  }
+  function escapeHtml(s) {
+    return String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  }
+
   // js/api/inventory.js
   var sleep3 = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
   async function getInventory() {
@@ -1895,32 +2202,6 @@
       throw new Error(`Inventory item ${inventory_id} not found`);
     }
     return { success: true };
-  }
-
-  // js/api/partImage.js
-  function partImageAttrs(part, alt = "") {
-    const chain = [
-      part?.reference_image_url,
-      part?.fallback_image_svg,
-      part?.label_image_url
-    ].filter(Boolean);
-    if (chain.length === 0) return `src="" alt="${escapeAttr(alt)}"`;
-    const rest = chain.slice(1).map(encodeForAttr);
-    const onerror = rest.length ? ` onerror="${buildFallbackChain(rest)}"` : "";
-    return `src="${chain[0]}"${onerror} alt="${escapeAttr(alt)}"`;
-  }
-  function buildFallbackChain(sources) {
-    let handler = "this.onerror=null;";
-    for (let i = sources.length - 1; i >= 0; i--) {
-      handler = i === sources.length - 1 ? `this.onerror=null; this.src='${sources[i]}';` : `this.onerror=function(){${handler}}; this.src='${sources[i]}';`;
-    }
-    return handler;
-  }
-  function encodeForAttr(url) {
-    return String(url).replace(/'/g, "%27");
-  }
-  function escapeAttr(s) {
-    return String(s).replace(/"/g, "&quot;");
   }
 
   // js/components/scanner.js
@@ -2050,6 +2331,66 @@
     container.appendChild(demoSection);
     parent.appendChild(container);
   }
+  async function openCorrectionEditor(itemCard, cand, idx, parent) {
+    const existing = itemCard.querySelector(".candidate-editor");
+    if (existing) {
+      existing.remove();
+      return;
+    }
+    const holder = document.createElement("div");
+    holder.className = "candidate-editor";
+    holder.innerHTML = '<p class="picker-empty font-body">Loading the catalogue\u2026</p>';
+    itemCard.appendChild(holder);
+    let catalogue;
+    try {
+      catalogue = await getCatalogue();
+    } catch (err) {
+      holder.innerHTML = '<p class="picker-empty font-body">Could not load the catalogue.</p>';
+      return;
+    }
+    holder.innerHTML = "";
+    const shapePicker = createShapePicker(catalogue, {
+      value: cand.part.type,
+      onChange: (t) => {
+        colorPicker.setShape(t);
+        syncPreview();
+      }
+    });
+    const colorPicker = createColorPicker(catalogue, {
+      type: cand.part.type,
+      value: cand.part.color_id,
+      onChange: () => syncPreview()
+    });
+    const preview = createPartPreview(catalogue, {
+      type: cand.part.type,
+      colorId: cand.part.color_id
+    });
+    function syncPreview() {
+      preview.update(shapePicker.get(), colorPicker.get());
+    }
+    const actions = document.createElement("div");
+    actions.className = "candidate-editor-actions";
+    actions.innerHTML = `
+    <button type="button" class="brick-btn brick-btn-small editor-cancel">Cancel</button>
+    <button type="button" class="brick-btn brick-btn-primary brick-btn-small editor-apply">Use this part</button>
+  `;
+    holder.appendChild(shapePicker.el);
+    holder.appendChild(colorPicker.el);
+    holder.appendChild(preview.el);
+    holder.appendChild(actions);
+    actions.querySelector(".editor-cancel").onclick = () => holder.remove();
+    actions.querySelector(".editor-apply").onclick = () => {
+      const chosen = previewPart(catalogue, shapePicker.get(), colorPicker.get());
+      if (!chosen) {
+        showToast("Pick a shape and a colour first.");
+        return;
+      }
+      cand.part = { ...cand.part, ...chosen };
+      cand.corrected = true;
+      showToast(`Set to ${chosen.part_name}`);
+      renderResults(parent);
+    };
+  }
   async function runDetectionFlow(file, isBatch, parent) {
     try {
       currentUploadedImageSrc = URL.createObjectURL(file);
@@ -2131,11 +2472,12 @@
       addAllBtn.onclick = async () => {
         const promises = candidates.map(async (cand, idx) => {
           if (!addedIndices.has(idx)) {
-            await addInventoryItem({
-              part_id: cand.part.part_id,
+            await addInventoryItem(cand.corrected ? {
+              type: cand.part.type,
+              color_id: cand.part.color_id,
               quantity: 1,
               source_image_key: cand.label
-            });
+            } : { part_id: cand.part.part_id, quantity: 1, source_image_key: cand.label });
             addedIndices.add(idx);
           }
         });
@@ -2173,7 +2515,7 @@
           <div class="candidate-info-wrapper">
             <div class="candidate-header-row">
               <span class="candidate-category font-display">${cand.part.category}</span>
-              <span class="confidence-badge ${cand.confidence > 90 ? "high" : ""}">${cand.confidence}% Match</span>
+              ${cand.corrected ? `<span class="confidence-badge corrected" title="You changed this result">Corrected</span>` : `<span class="confidence-badge ${cand.confidence > 90 ? "high" : ""}">${cand.confidence}% Match</span>`}
             </div>
             <h5 class="candidate-name font-display">${cand.part.part_name}</h5>
             
@@ -2181,21 +2523,28 @@
               ${isAdded ? `<div class="added-badge font-display text-success">
                      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:middle;margin-right:4px"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
                      Added to Bin
-                   </div>` : `<button type="button" class="brick-btn brick-btn-primary brick-btn-small add-to-bin-btn">Add to bin</button>`}
+                   </div>` : `<button type="button" class="brick-btn brick-btn-small correct-btn"
+                           title="Change the detected shape or colour">Correct</button>
+                   <button type="button" class="brick-btn brick-btn-primary brick-btn-small add-to-bin-btn">Add to bin</button>`}
             </div>
           </div>
         </div>
       </div>
     `;
+      const correctBtn = itemCard.querySelector(".correct-btn");
+      if (correctBtn) {
+        correctBtn.onclick = () => openCorrectionEditor(itemCard, cand, idx, parent);
+      }
       const addBtn = itemCard.querySelector(".add-to-bin-btn");
       if (addBtn) {
         addBtn.onclick = async () => {
           try {
-            await addInventoryItem({
-              part_id: cand.part.part_id,
+            await addInventoryItem(cand.corrected ? {
+              type: cand.part.type,
+              color_id: cand.part.color_id,
               quantity: 1,
               source_image_key: cand.label
-            });
+            } : { part_id: cand.part.part_id, quantity: 1, source_image_key: cand.label });
             addedIndices.add(idx);
             triggerInventoryUpdate();
             showToast(`Added ${cand.part.part_name} to your inventory`);
@@ -2290,20 +2639,63 @@
     };
     headerSearch.appendChild(selectBox);
     const colorSelectBox = document.createElement("div");
-    colorSelectBox.className = "category-select-wrapper color-select-wrapper";
-    const colors = ["All", ...new Set(inventoryItems.map((i) => parsePartNameAndColor(i.part_name).color))];
-    let colorOptions = colors.map((col) => `<option value="${col}" ${selectedColor === col ? "selected" : ""}>Colour: ${col}</option>`).join("");
+    colorSelectBox.className = "category-select-wrapper color-filter-wrapper";
+    const invColors = [];
+    const seenColors = /* @__PURE__ */ new Set();
+    inventoryItems.forEach((i) => {
+      const tag = resolveColorTag(i);
+      if (tag.label && !seenColors.has(tag.label)) {
+        seenColors.add(tag.label);
+        invColors.push(tag);
+      }
+    });
+    invColors.sort((a, b) => a.label.localeCompare(b.label));
+    const activeTag = invColors.find((c) => c.label === selectedColor);
     colorSelectBox.innerHTML = `
-    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" class="filter-icon"><path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5C6 11.1 5 13 5 15a7 7 0 0 0 7 7z" fill="currentColor"></path></svg>
-    <select class="category-select font-display" id="inv-color-select">
-      ${colorOptions}
-    </select>
+    <button type="button" class="color-filter-btn font-display" id="inv-color-btn"
+            aria-haspopup="listbox" aria-expanded="false">
+      <span class="color-filter-dot" style="background:${activeTag ? activeTag.hex || "#CCC" : "transparent"};
+            ${activeTag ? "" : "background:linear-gradient(135deg,#D01012 0 25%,#FFD500 25% 50%,#1E7A34 50% 75%,#0057A6 75% 100%);"}"></span>
+      <span class="color-filter-label">${selectedColor === "All" ? "All colours" : selectedColor}</span>
+    </button>
+    <div class="color-filter-pop" hidden role="listbox" aria-label="Filter by colour"></div>
   `;
-    const colorSelect = colorSelectBox.querySelector("#inv-color-select");
-    colorSelect.onchange = (e) => {
-      selectedColor = e.target.value;
-      renderListBody(container);
+    const colorBtn = colorSelectBox.querySelector("#inv-color-btn");
+    const colorPop = colorSelectBox.querySelector(".color-filter-pop");
+    function renderColorPop() {
+      colorPop.innerHTML = "";
+      const mkOption = (label, hex) => {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.className = `color-filter-option ${selectedColor === label ? "is-selected" : ""}`;
+        b.setAttribute("role", "option");
+        b.innerHTML = `<span class="color-filter-dot" style="background:${hex || "transparent"};
+        ${hex ? "" : "background:linear-gradient(135deg,#D01012 0 25%,#FFD500 25% 50%,#1E7A34 50% 75%,#0057A6 75% 100%);"}"></span>
+        <span>${label}</span>`;
+        b.onclick = () => {
+          selectedColor = label;
+          colorPop.hidden = true;
+          colorBtn.setAttribute("aria-expanded", "false");
+          renderInventory(parentEl);
+        };
+        return b;
+      };
+      colorPop.appendChild(mkOption("All", null));
+      invColors.forEach((c) => colorPop.appendChild(mkOption(c.label, c.hex)));
+    }
+    renderColorPop();
+    colorBtn.onclick = (e) => {
+      e.stopPropagation();
+      const open = colorPop.hidden;
+      colorPop.hidden = !open;
+      colorBtn.setAttribute("aria-expanded", String(open));
     };
+    document.addEventListener("click", () => {
+      if (!colorPop.hidden) {
+        colorPop.hidden = true;
+        colorBtn.setAttribute("aria-expanded", "false");
+      }
+    }, { once: true });
     headerSearch.appendChild(colorSelectBox);
     container.appendChild(headerSearch);
     const totalsBar = document.createElement("div");
@@ -2352,10 +2744,12 @@
     if (!listPlaceholder) return;
     listPlaceholder.innerHTML = "";
     const filtered = inventoryItems.filter((item) => {
-      const parsed = parsePartNameAndColor(item.part_name);
-      const matchesSearch = parsed.name.toLowerCase().includes(searchQuery.toLowerCase());
+      const q = searchQuery.trim().toLowerCase();
+      const tag = resolveColorTag(item);
+      const haystack = [item.part_name, tag.label, item.element_id, item.part_num].filter(Boolean).join(" ").toLowerCase();
+      const matchesSearch = !q || haystack.includes(q);
       const matchesCat = selectedCategory === "All" || item.category === selectedCategory;
-      const matchesColor = selectedColor === "All" || parsed.color === selectedColor;
+      const matchesColor = selectedColor === "All" || tag.label === selectedColor;
       return matchesSearch && matchesCat && matchesColor;
     });
     const totalCount = inventoryItems.reduce((acc, curr) => acc + curr.quantity, 0);
@@ -2899,287 +3293,6 @@
   function closeBuildDetails() {
     activeBuildId = null;
     activeBuildDetail = null;
-  }
-
-  // js/api/catalogue.js
-  var ELEMENT_IMAGE_BASE = "https://cdn.rebrickable.com/media/parts/elements";
-  var cache = null;
-  var inFlight = null;
-  async function getCatalogue() {
-    if (cache) return cache;
-    if (inFlight) return inFlight;
-    inFlight = (async () => {
-      if (IS_MOCKED) {
-        cache = mockCatalogue();
-        return cache;
-      }
-      await ensureFreshToken();
-      const res = await fetch(`${API_BASE_URL}/catalogue`, { headers: { ...authHeader() } });
-      if (!res.ok) throw new Error("Could not load the part catalogue");
-      const data = await res.json();
-      data.shapeByType = new Map(data.shapes.map((s) => [s.type, s]));
-      data.colorById = new Map(data.colors.map((c) => [c.color_id, c]));
-      cache = data;
-      return cache;
-    })().finally(() => {
-      inFlight = null;
-    });
-    return inFlight;
-  }
-  function elementImageUrl(elementId) {
-    return elementId ? `${ELEMENT_IMAGE_BASE}/${elementId}.jpg` : null;
-  }
-  function colorsForShape(catalogue, type) {
-    const shape = catalogue.shapeByType.get(type);
-    if (!shape) return [];
-    return shape.colors.map((id) => catalogue.colorById.get(id)).filter(Boolean);
-  }
-  function elementFor(catalogue, type, colorId) {
-    const shape = catalogue.shapeByType.get(type);
-    return shape ? shape.element_ids[String(colorId)] || null : null;
-  }
-  function previewPart(catalogue, type, colorId) {
-    const shape = catalogue.shapeByType.get(type);
-    const color = catalogue.colorById.get(colorId);
-    if (!shape || !color) return null;
-    const elementId = elementFor(catalogue, type, colorId);
-    return {
-      type,
-      color_id: colorId,
-      element_id: elementId,
-      part_num: shape.part_num,
-      part_name: `${shape.name} (${color.name})`,
-      category: shape.category,
-      color_name: color.name,
-      color_hex: color.hex,
-      reference_image_url: elementImageUrl(elementId),
-      label_image_url: shape.label_image_url,
-      fallback_image_svg: null
-    };
-  }
-  function contrastOn(hex) {
-    const h = String(hex || "").replace("#", "");
-    if (h.length !== 6) return "#22222A";
-    const [r, g, b] = [0, 2, 4].map((i) => parseInt(h.slice(i, i + 2), 16) / 255);
-    const lin = (c) => c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
-    const L = 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
-    return L > 0.45 ? "#22222A" : "#FFFFFF";
-  }
-  function mockCatalogue() {
-    const colors = [
-      { color_id: 4, name: "Red", hex: "#D01012" },
-      { color_id: 1, name: "Blue", hex: "#0057A6" },
-      { color_id: 14, name: "Yellow", hex: "#FFD500" },
-      { color_id: 2, name: "Green", hex: "#1E7A34" },
-      { color_id: 72, name: "Dark Bluish Gray", hex: "#5B5B66" },
-      { color_id: 15, name: "White", hex: "#FFFFFF" }
-    ];
-    const shapes = [
-      ["brick-2x4", "2x4 Brick", "Brick", "3001"],
-      ["brick-2x2", "2x2 Brick", "Brick", "3003"],
-      ["plate-1x2", "1x2 Plate", "Plate", "3023"],
-      ["plate-2x2", "2x2 Plate", "Plate", "3022"],
-      ["plate-2x4", "2x4 Plate", "Plate", "3020"],
-      ["slope-2x2", "2x2 Slope 45", "Slope", "3039"],
-      ["technic-1x1", "Technic 1x1 Brick", "Technic", "6541"]
-    ].map(([type, name, category, part_num]) => ({
-      type,
-      name,
-      category,
-      part_num,
-      label_image_url: null,
-      sample_element_id: null,
-      sample_image_url: null,
-      colors: colors.map((c) => c.color_id),
-      element_ids: {}
-    }));
-    const data = { shapes, colors };
-    data.shapeByType = new Map(shapes.map((s) => [s.type, s]));
-    data.colorById = new Map(colors.map((c) => [c.color_id, c]));
-    return data;
-  }
-
-  // js/components/pickers.js
-  function createShapePicker(catalogue, { value = null, onChange } = {}) {
-    let selected = value || catalogue.shapes[0] && catalogue.shapes[0].type;
-    const categories = [...new Set(catalogue.shapes.map((s) => s.category))].sort();
-    let activeCategory = "All";
-    const wrap = document.createElement("div");
-    wrap.className = "picker-block";
-    wrap.innerHTML = `
-    <div class="picker-head">
-      <label class="picker-label font-display">Part Shape</label>
-      <input type="search" class="picker-search font-body shape-search"
-             placeholder="Search shapes or part number..." />
-    </div>
-    <div class="category-chips" role="tablist" aria-label="Filter by category"></div>
-    <div class="picker-grid shape-grid" role="listbox" aria-label="Part shape"
-         data-layout="flat-sorted"></div>
-  `;
-    const grid = wrap.querySelector(".shape-grid");
-    const search = wrap.querySelector(".shape-search");
-    const chipRow = wrap.querySelector(".category-chips");
-    function renderChips() {
-      chipRow.innerHTML = "";
-      ["All", ...categories].forEach((cat) => {
-        const count = cat === "All" ? catalogue.shapes.length : catalogue.shapes.filter((s) => s.category === cat).length;
-        const chip = document.createElement("button");
-        chip.type = "button";
-        chip.className = `category-chip font-display ${cat === activeCategory ? "is-active" : ""}`;
-        chip.setAttribute("role", "tab");
-        chip.setAttribute("aria-selected", String(cat === activeCategory));
-        chip.textContent = `${cat} ${count}`;
-        chip.onclick = () => {
-          activeCategory = cat;
-          renderChips();
-          render();
-        };
-        chipRow.appendChild(chip);
-      });
-    }
-    function render() {
-      const q = search.value.trim().toLowerCase();
-      const matches = catalogue.shapes.filter((s) => {
-        if (activeCategory !== "All" && s.category !== activeCategory) return false;
-        return !q || s.name.toLowerCase().includes(q) || s.part_num.toLowerCase().includes(q) || s.category.toLowerCase().includes(q);
-      });
-      grid.innerHTML = "";
-      if (!matches.length) {
-        grid.innerHTML = `<p class="picker-empty font-body">No ${activeCategory === "All" ? "" : activeCategory.toLowerCase() + " "}shapes match "${escapeHtml(search.value)}"</p>`;
-        return;
-      }
-      matches.forEach((s) => {
-        const btn = document.createElement("button");
-        btn.type = "button";
-        btn.className = `picker-tile shape-tile ${s.type === selected ? "is-selected" : ""}`;
-        btn.setAttribute("role", "option");
-        btn.setAttribute("aria-selected", String(s.type === selected));
-        btn.title = `${s.name} - ${s.category} - part ${s.part_num}`;
-        btn.innerHTML = `
-        <span class="shape-tile-img">
-          <img ${partImageAttrs({
-          reference_image_url: s.label_image_url,
-          label_image_url: s.sample_image_url
-        }, s.name)} />
-        </span>
-        <span class="shape-tile-name font-display">${escapeHtml(s.name)}</span>
-        <span class="shape-tile-part font-body">${escapeHtml(s.part_num)}</span>
-      `;
-        btn.onclick = () => {
-          selected = s.type;
-          render();
-          if (onChange) onChange(selected);
-        };
-        grid.appendChild(btn);
-      });
-    }
-    search.oninput = render;
-    renderChips();
-    render();
-    return {
-      el: wrap,
-      get: () => selected,
-      set: (t) => {
-        selected = t;
-        render();
-      }
-    };
-  }
-  function createColorPicker(catalogue, { type, value = null, onChange } = {}) {
-    let shapeType = type;
-    let selected = value;
-    const wrap = document.createElement("div");
-    wrap.className = "picker-block";
-    wrap.innerHTML = `
-    <div class="picker-head">
-      <label class="picker-label font-display">Colour <span class="picker-count font-body"></span></label>
-      <input type="search" class="picker-search font-body color-search"
-             placeholder="Search colours..." />
-    </div>
-    <div class="picker-grid color-grid" role="listbox" aria-label="Part colour"></div>
-  `;
-    const grid = wrap.querySelector(".color-grid");
-    const search = wrap.querySelector(".color-search");
-    const count = wrap.querySelector(".picker-count");
-    let ready = false;
-    function render() {
-      const available = colorsForShape(catalogue, shapeType);
-      if (selected != null && !available.some((c) => c.color_id === selected)) {
-        selected = null;
-      }
-      if (selected == null && available.length) {
-        selected = available[0].color_id;
-        if (ready && onChange) onChange(selected);
-      }
-      const q = search.value.trim().toLowerCase();
-      const matches = available.filter((c) => !q || c.name.toLowerCase().includes(q));
-      count.textContent = `(${available.length} available for this shape)`;
-      grid.innerHTML = "";
-      if (!matches.length) {
-        grid.innerHTML = `<p class="picker-empty font-body">No colours match "${escapeHtml(search.value)}"</p>`;
-        return;
-      }
-      matches.forEach((c) => {
-        const btn = document.createElement("button");
-        btn.type = "button";
-        btn.className = `color-swatch ${c.color_id === selected ? "is-selected" : ""}`;
-        btn.setAttribute("role", "option");
-        btn.setAttribute("aria-selected", String(c.color_id === selected));
-        btn.title = `${c.name} (colour ${c.color_id})`;
-        btn.style.backgroundColor = c.hex;
-        btn.style.color = contrastOn(c.hex);
-        btn.innerHTML = `<span class="color-swatch-name">${escapeHtml(c.name)}</span>`;
-        btn.onclick = () => {
-          selected = c.color_id;
-          render();
-          if (onChange) onChange(selected);
-        };
-        grid.appendChild(btn);
-      });
-    }
-    search.oninput = render;
-    render();
-    ready = true;
-    return {
-      el: wrap,
-      get: () => selected,
-      set: (id) => {
-        selected = id;
-        render();
-      },
-      setShape: (t) => {
-        shapeType = t;
-        render();
-      }
-    };
-  }
-  function createPartPreview(catalogue, { type, colorId } = {}) {
-    const el = document.createElement("div");
-    el.className = "part-preview brick-card";
-    function render(t, cid) {
-      const p = previewPart(catalogue, t, cid);
-      if (!p) {
-        el.innerHTML = `<p class="picker-empty font-body">Choose a shape and colour</p>`;
-        return;
-      }
-      el.innerHTML = `
-      <div class="part-preview-img">
-        <img ${partImageAttrs(p, p.part_name)} />
-      </div>
-      <div class="part-preview-meta">
-        <span class="part-preview-name font-display">${escapeHtml(p.part_name)}</span>
-        <span class="part-preview-ids font-body">
-          Element <strong>${p.element_id ? escapeHtml(p.element_id) : "\u2014"}</strong>
-          &middot; Part ${escapeHtml(p.part_num)}
-        </span>
-      </div>
-    `;
-    }
-    render(type, colorId);
-    return { el, update: render };
-  }
-  function escapeHtml(s) {
-    return String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
   }
 
   // js/components/addPart.js
