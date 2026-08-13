@@ -243,3 +243,54 @@
 .auth-toggle-link:hover {
   text-decoration: underline;
 }
+
+/* ---------------------------------------------------------------------------
+   Sign-in transition: a point of light grows until it swallows the screen,
+   revealing the workspace behind it. Fixed and above everything, on <body>
+   rather than inside #app, which is torn down when the workspace mounts.
+   --------------------------------------------------------------------------- */
+.login-warp {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: all;      /* swallow stray clicks while it plays */
+  background: transparent;
+  overflow: hidden;
+}
+
+.login-warp-core {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--cream-100, #F6F1E4);
+  box-shadow:
+    0 0 0 0 rgba(255, 213, 0, 0.55),
+    0 0 26px 10px rgba(255, 255, 255, 0.85);
+  /* Scaled far past the viewport so the circle's edge is well off-screen by
+     the end - otherwise a curved seam is visible at the corners. */
+  animation: login-warp-expand 900ms cubic-bezier(0.65, 0, 0.35, 1) forwards;
+}
+
+@keyframes login-warp-expand {
+  0%   { transform: scale(0.35); opacity: 0; }
+  12%  { opacity: 1; }
+  55%  { box-shadow: 0 0 0 14px rgba(255, 213, 0, 0.35),
+                     0 0 60px 22px rgba(255, 255, 255, 0.9); }
+  100% { transform: scale(160); opacity: 1;
+         box-shadow: 0 0 0 0 rgba(255, 213, 0, 0), 0 0 0 0 rgba(255,255,255,0); }
+}
+
+.login-warp.is-clearing {
+  animation: login-warp-clear 600ms ease forwards;
+}
+
+@keyframes login-warp-clear {
+  to { opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .login-warp { display: none; }
+}

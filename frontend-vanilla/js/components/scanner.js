@@ -91,8 +91,18 @@ function renderIdleState(parent) {
     <div class="dropzone-circle">
       <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
     </div>
-    <h4 class="font-display">Upload Brick Photo</h4>
+    <h4 class="font-display">Upload Photo</h4>
     <p>Drag files here or click to browse</p>
+    <div class="photo-tip font-body">
+      <span class="photo-tip-icon" aria-hidden="true">i</span>
+      <span>
+        <strong>Shoot at an angle from above</strong>, not straight down, on a
+        plain surface in good light. The angle is what reveals a piece's
+        height &ndash; from directly overhead a brick and a plate look
+        identical. For several pieces at once, spread them apart so they
+        don't touch.
+      </span>
+    </div>
     <input type="file" accept="image/*" style="display:none" id="scanner-file-input" />
   `;
 

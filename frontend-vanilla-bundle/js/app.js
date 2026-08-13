@@ -466,6 +466,24 @@
   var passwordValue = "";
   var displayNameValue = "";
   var activeCancelAnimation = null;
+  function playLoginTransition() {
+    const reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (reduce) return Promise.resolve();
+    return new Promise((resolve) => {
+      const overlay = document.createElement("div");
+      overlay.className = "login-warp";
+      overlay.innerHTML = '<span class="login-warp-core"></span>';
+      document.body.appendChild(overlay);
+      const core = overlay.firstElementChild;
+      const done = () => {
+        overlay.classList.add("is-clearing");
+        setTimeout(() => overlay.remove(), 620);
+        resolve();
+      };
+      core.addEventListener("animationend", done, { once: true });
+      setTimeout(done, 1400);
+    });
+  }
   function renderAuth(parentEl) {
     if (activeCancelAnimation) {
       activeCancelAnimation();
@@ -569,6 +587,7 @@
             authErrorMsg = null;
           } else {
             const result = await signIn({ email: emailValue, password: passwordValue });
+            await playLoginTransition();
             setUser(result.user, result.idToken);
           }
         } catch (err) {
@@ -1971,8 +1990,18 @@
     <div class="dropzone-circle">
       <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
     </div>
-    <h4 class="font-display">Upload Brick Photo</h4>
+    <h4 class="font-display">Upload Photo</h4>
     <p>Drag files here or click to browse</p>
+    <div class="photo-tip font-body">
+      <span class="photo-tip-icon" aria-hidden="true">i</span>
+      <span>
+        <strong>Shoot at an angle from above</strong>, not straight down, on a
+        plain surface in good light. The angle is what reveals a piece's
+        height &ndash; from directly overhead a brick and a plate look
+        identical. For several pieces at once, spread them apart so they
+        don't touch.
+      </span>
+    </div>
     <input type="file" accept="image/*" style="display:none" id="scanner-file-input" />
   `;
     const fileInput = dropzone.querySelector("#scanner-file-input");
@@ -2557,6 +2586,34 @@
   }
 
   // js/components/builds.js
+  async function requestMissingPartsEmail(buildId, btn) {
+    const original = btn ? btn.textContent : null;
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = "Sending\u2026";
+    }
+    try {
+      await ensureFreshToken();
+      const res = await fetch(`${API_BASE_URL}/builds/${buildId}/email-missing-parts`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...authHeader() }
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.message || `Request failed (${res.status})`);
+      showToast(data.message || "Sent - check your inbox for the parts list");
+      if (btn) btn.textContent = "Sent \u2713";
+    } catch (err) {
+      showToast(err.message || "Could not send that email.");
+      if (btn) btn.textContent = original;
+    } finally {
+      if (btn) {
+        btn.disabled = false;
+        setTimeout(() => {
+          if (btn.isConnected) btn.textContent = original;
+        }, 2500);
+      }
+    }
+  }
   var buildsList = [];
   var activeBuildId = null;
   var activeBuildDetail = null;
@@ -2614,12 +2671,24 @@
           <div class="progress-bar" style="width: ${build2.pct_owned}%; background-color: ${is100Percent ? "var(--brick-green)" : "var(--brick-purple)"}"></div>
         </div>
         <span class="pct-text font-display">${build2.pct_owned}% of parts owned</span>
+        ${is100Percent ? "" : `
+        <button type="button" class="build-email-btn font-display" data-build-id="${build2.build_id}"
+                title="Email me the parts I'm missing for this build">
+          Email missing parts
+        </button>`}
       </div>
       ${is100Percent ? `<span class="build-ready-tag font-display">
              <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline-block;vertical-align:middle;margin-right:2px"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
              Ready!
            </span>` : ""}
     `;
+      const emailBtn = card.querySelector(".build-email-btn");
+      if (emailBtn) {
+        emailBtn.onclick = (e) => {
+          e.stopPropagation();
+          requestMissingPartsEmail(build2.build_id, emailBtn);
+        };
+      }
       card.querySelector(".popout-btn").onclick = (e) => {
         e.stopPropagation();
         spawnStandalonePanel("build", {

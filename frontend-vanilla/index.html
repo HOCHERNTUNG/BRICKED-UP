@@ -39,9 +39,28 @@
       use of its catalogue images by community members provided the source is
       credited. Sits outside #app so it survives the app's re-renders.
     -->
-    <div class="attribution-credit">
-      Part images courtesy of
-      <a href="https://www.bricklink.com/" target="_blank" rel="noopener noreferrer">BrickLink.com</a>
+    <div class="corner-overlay">
+      <!--
+        Styled after the pill on the back of a LEGO Classic box, where an
+        arrow-in-circle glyph sits next to a URL. Same idea here: a small,
+        quiet mark that points somewhere official.
+      -->
+      <a class="brickyield-pill" href="https://brickyield.streamlit.app/"
+         target="_blank" rel="noopener noreferrer"
+         title="Brickyield - what your bricks are worth">
+        <span class="brickyield-glyph" aria-hidden="true">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+               stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="7" y1="17" x2="17" y2="7"></line>
+            <polyline points="9 7 17 7 17 15"></polyline>
+          </svg>
+        </span>
+        <span class="brickyield-text">Bricks counted. Now see what they yield.</span>
+      </a>
+      <div class="attribution-credit">
+        Part data from Rebrickable &middot; images courtesy of
+        <a href="https://www.bricklink.com/" target="_blank" rel="noopener noreferrer">BrickLink.com</a>
+      </div>
     </div>
 
     <!-- Application Entry Point -->

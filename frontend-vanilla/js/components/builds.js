@@ -1,6 +1,39 @@
 import { getBuilds, getBuildDetail } from '../api/builds.js';
 import { spawnStandalonePanel } from '../hooks/state.js';
 import { partImageAttrs } from '../api/partImage.js';
+import { API_BASE_URL, authHeader, ensureFreshToken } from '../api/client.js';
+import { showToast } from '../hooks/toast.js';
+
+/**
+ * Ask the backend to email this build's shortfall.
+ *
+ * Shared by the Build Ideas cards and the build detail view, so the action is
+ * reachable from wherever the user notices they are short of parts rather
+ * than only after opening the instructions.
+ */
+export async function requestMissingPartsEmail(buildId, btn) {
+  const original = btn ? btn.textContent : null;
+  if (btn) { btn.disabled = true; btn.textContent = 'Sending…'; }
+  try {
+    await ensureFreshToken();
+    const res = await fetch(`${API_BASE_URL}/builds/${buildId}/email-missing-parts`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...authHeader() }
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.message || `Request failed (${res.status})`);
+    showToast(data.message || 'Sent - check your inbox for the parts list');
+    if (btn) btn.textContent = 'Sent ✓';
+  } catch (err) {
+    showToast(err.message || 'Could not send that email.');
+    if (btn) btn.textContent = original;
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      setTimeout(() => { if (btn.isConnected) btn.textContent = original; }, 2500);
+    }
+  }
+}
 
 let buildsList = [];
 let activeBuildId = null;
@@ -76,6 +109,11 @@ function renderCatalogView(container) {
           <div class="progress-bar" style="width: ${build.pct_owned}%; background-color: ${is100Percent ? 'var(--brick-green)' : 'var(--brick-purple)'}"></div>
         </div>
         <span class="pct-text font-display">${build.pct_owned}% of parts owned</span>
+        ${is100Percent ? '' : `
+        <button type="button" class="build-email-btn font-display" data-build-id="${build.build_id}"
+                title="Email me the parts I'm missing for this build">
+          Email missing parts
+        </button>`}
       </div>
       ${is100Percent 
         ? `<span class="build-ready-tag font-display">
@@ -85,6 +123,14 @@ function renderCatalogView(container) {
         : ''
       }
     `;
+    const emailBtn = card.querySelector('.build-email-btn');
+    if (emailBtn) {
+      emailBtn.onclick = (e) => {
+        e.stopPropagation();     // the card itself opens the build
+        requestMissingPartsEmail(build.build_id, emailBtn);
+      };
+    }
+
     card.querySelector('.popout-btn').onclick = (e) => {
       e.stopPropagation();
       spawnStandalonePanel('build', {

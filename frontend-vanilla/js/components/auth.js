@@ -15,6 +15,44 @@ let activeCancelAnimation = null;
 /**
  * Renders the Auth Screen layout in Vanilla JS
  */
+/**
+ * The sign-in transition: a point of light expands until it fills the screen,
+ * and the workspace is revealed behind it as it fades.
+ *
+ * Resolves when the aperture has covered the viewport, which is the moment
+ * the workspace can be mounted unseen. The overlay then fades and removes
+ * itself. It lives on <body>, not inside #app, because #app is replaced
+ * wholesale when the app switches from the auth screen to the workspace and
+ * anything inside it would be destroyed mid-animation.
+ *
+ * Honours prefers-reduced-motion by resolving immediately.
+ */
+export function playLoginTransition() {
+  const reduce = window.matchMedia
+    && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (reduce) return Promise.resolve();
+
+  return new Promise((resolve) => {
+    const overlay = document.createElement('div');
+    overlay.className = 'login-warp';
+    overlay.innerHTML = '<span class="login-warp-core"></span>';
+    document.body.appendChild(overlay);
+
+    const core = overlay.firstElementChild;
+    // Hand control back once the aperture fills the screen; the fade-out
+    // afterwards is purely decorative and must not delay the workspace.
+    const done = () => {
+      overlay.classList.add('is-clearing');
+      setTimeout(() => overlay.remove(), 620);
+      resolve();
+    };
+    core.addEventListener('animationend', done, { once: true });
+    // Never strand the user on the login screen if the animation is dropped
+    // (background tab, reduced GPU, interrupted paint).
+    setTimeout(done, 1400);
+  });
+}
+
 export function renderAuth(parentEl) {
   if (activeCancelAnimation) {
     activeCancelAnimation();
@@ -155,6 +193,9 @@ export function renderAuth(parentEl) {
           authErrorMsg = null;
         } else {
           const result = await signIn({ email: emailValue, password: passwordValue });
+          // Play the transition BEFORE swapping to the workspace, so the
+          // expanding aperture covers the render rather than competing with it.
+          await playLoginTransition();
           setUser(result.user, result.idToken);
         }
       } catch (err) {
