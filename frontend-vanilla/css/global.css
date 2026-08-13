@@ -84,12 +84,16 @@ input, button, select, textarea {
    unobtrusive: the workspace is a full-viewport canvas, so this sits in the
    bottom-right corner and never intercepts pointer events. Uses the theme
    tokens so it stays legible across every theme. */
+/* Sits INSIDE .corner-overlay's flex column.
+   It used to be position:fixed at right:10px/bottom:6px - the same anchor as
+   the overlay itself - which took it out of that column and dropped it on top
+   of the Brickyield pill. Two elements pinned to one corner will always
+   collide; the stack has to be laid out by the flex parent, not by each child
+   independently choosing the same coordinates. */
 .attribution-credit {
-  position: fixed;
-  right: 10px;
-  bottom: 6px;
-  z-index: 1;
   pointer-events: none;
+  text-align: right;
+  max-width: 340px;
   font-family: var(--font-body);
   font-size: 11px;
   line-height: 1.4;
@@ -113,13 +117,13 @@ input, button, select, textarea {
    arrow-in-circle glyph beside a short line of text. */
 .corner-overlay {
   position: fixed;
-  right: 10px;
-  bottom: 6px;
+  right: 14px;
+  bottom: 14px;
   z-index: 2;
   display: flex;
   flex-direction: column;
   align-items: flex-end;
-  gap: 5px;
+  gap: 8px;               /* clear air between the pill and the credit line */
   pointer-events: none;   /* the workspace stays draggable through it */
 }
 

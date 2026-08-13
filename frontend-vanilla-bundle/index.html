@@ -12,12 +12,12 @@
 
     <!-- Style Modules -->
     <link rel="stylesheet" href="css/tokens.css?v=24516a4a93" />
-    <link rel="stylesheet" href="css/global.css?v=ae3341aa44" />
+    <link rel="stylesheet" href="css/global.css?v=b6fd5237f8" />
     <link rel="stylesheet" href="css/workspace.css?v=9a18d31375" />
     <link rel="stylesheet" href="css/panel.css?v=89cef19fad" />
     <link rel="stylesheet" href="css/actionbar.css?v=74edbdff35" />
-    <link rel="stylesheet" href="css/auth.css?v=b040e1669f" />
-    <link rel="stylesheet" href="css/components.css?v=242295e6ba" />
+    <link rel="stylesheet" href="css/auth.css?v=87a3f4c16b" />
+    <link rel="stylesheet" href="css/components.css?v=2904bc482e" />
   </head>
   <body>
     <!-- Main Application Wrapper -->
@@ -35,9 +35,14 @@
     </div>
 
     <!--
-      Attribution for the part catalogue artwork. BrickLink permits external
-      use of its catalogue images by community members provided the source is
-      credited. Sits outside #app so it survives the app's re-renders.
+      Attribution for the part catalogue data and artwork. Sits outside #app so
+      it survives the app's re-renders.
+
+      Updated when part resolution moved to Rebrickable's elements table: the
+      photos are now served from Rebrickable's CDN, keyed by element id, so
+      crediting BrickLink for them was simply wrong. BrickLink is still named
+      because that is where the "Buy this part" links in the missing-parts
+      email point.
     -->
     <div class="corner-overlay">
       <!--
@@ -58,12 +63,14 @@
         <span class="brickyield-text">Bricks counted. Now see what they yield.</span>
       </a>
       <div class="attribution-credit">
-        Part data from Rebrickable &middot; images courtesy of
-        <a href="https://www.bricklink.com/" target="_blank" rel="noopener noreferrer">BrickLink.com</a>
+        Part, colour and element data &amp; images from
+        <a href="https://rebrickable.com/" target="_blank" rel="noopener noreferrer">Rebrickable</a>
+        &middot; purchase links to
+        <a href="https://www.bricklink.com/" target="_blank" rel="noopener noreferrer">BrickLink</a>
       </div>
     </div>
 
     <!-- Application Entry Point -->
-    <script src="js/app.js?v=f4afd0316a"></script>
+    <script src="js/app.js?v=de4f5e337a"></script>
   </body>
 </html>

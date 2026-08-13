@@ -8,10 +8,25 @@ function computeDefaultPanels() {
   const vw = window.innerWidth || 1280;
   const vh = window.innerHeight || 800;
 
-  // Panel dimensions
-  const scannerW = 384, scannerH = 480;
-  const inventoryW = 561, inventoryH = 512;
-  const buildsW = 384, buildsH = 512;
+  // Panel dimensions.
+  //
+  // One shared height for all three. They sit in a row, so differing heights
+  // left a ragged bottom edge that read as misalignment rather than as
+  // deliberate sizing.
+  //
+  // The height is set by the scanner, which is the tallest requirement: the
+  // upload target, the photography tip and all three demo buttons have to be
+  // visible without scrolling, or the demos - the fastest way to show the app
+  // working - are hidden below the fold on first load. The other two panels
+  // simply show more rows at this height, which costs them nothing.
+  //
+  // Clamped to the viewport below, so a short screen still gets a usable
+  // layout rather than panels running off the bottom.
+  const panelH = 566;
+  const scannerW = 400;
+  const inventoryW = 561;
+  const buildsW = 384;
+  const scannerH = panelH, inventoryH = panelH, buildsH = panelH;
 
   const totalW = scannerW + inventoryW + buildsW;
   const gap = 24;

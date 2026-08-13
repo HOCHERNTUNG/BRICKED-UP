@@ -196,9 +196,11 @@
   function computeDefaultPanels() {
     const vw = window.innerWidth || 1280;
     const vh = window.innerHeight || 800;
-    const scannerW = 384, scannerH = 480;
-    const inventoryW = 561, inventoryH = 512;
-    const buildsW = 384, buildsH = 512;
+    const panelH = 566;
+    const scannerW = 400;
+    const inventoryW = 561;
+    const buildsW = 384;
+    const scannerH = panelH, inventoryH = panelH, buildsH = panelH;
     const totalW = scannerW + inventoryW + buildsW;
     const gap = 24;
     const totalWithGaps = totalW + gap * 2;
@@ -466,22 +468,50 @@
   var passwordValue = "";
   var displayNameValue = "";
   var activeCancelAnimation = null;
+  var tunnelWarp = null;
+  var WARP_CHARGE_MS = 780;
+  var WARP_PEAK = 16;
+  var WARP_OPEN_MS = 620;
   function playLoginTransition() {
     const reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    if (reduce) return Promise.resolve();
+    if (reduce) {
+      if (tunnelWarp) tunnelWarp(1);
+      return Promise.resolve();
+    }
     return new Promise((resolve) => {
       const overlay = document.createElement("div");
       overlay.className = "login-warp";
       overlay.innerHTML = '<span class="login-warp-core"></span>';
       document.body.appendChild(overlay);
       const core = overlay.firstElementChild;
+      let finished = false;
       const done = () => {
+        if (finished) return;
+        finished = true;
+        if (tunnelWarp) tunnelWarp(1);
         overlay.classList.add("is-clearing");
         setTimeout(() => overlay.remove(), 620);
         resolve();
       };
-      core.addEventListener("animationend", done, { once: true });
-      setTimeout(done, 1400);
+      const openAperture = () => {
+        core.classList.add("is-opening");
+        core.addEventListener("animationend", done, { once: true });
+        setTimeout(done, WARP_OPEN_MS + 350);
+      };
+      const start = performance.now();
+      const step = (now) => {
+        const t = Math.min(1, (now - start) / WARP_CHARGE_MS);
+        const eased = t * t * t;
+        if (tunnelWarp) tunnelWarp(1 + eased * (WARP_PEAK - 1));
+        core.style.setProperty("--charge", String(eased));
+        if (t < 1) {
+          requestAnimationFrame(step);
+        } else {
+          openAperture();
+        }
+      };
+      requestAnimationFrame(step);
+      setTimeout(done, WARP_CHARGE_MS + WARP_OPEN_MS + 700);
     });
   }
   function renderAuth(parentEl) {
@@ -643,6 +673,7 @@
   function initBrickTunnelAnimation(canvas) {
     const ctx = canvas.getContext("2d");
     let animationFrameId = null;
+    let warp = 1;
     const resize = () => {
       canvas.width = window.innerWidth;
       canvas.height = window.innerHeight;
@@ -708,7 +739,8 @@
       grad.addColorStop(1, "#060608");
       ctx.fillStyle = grad;
       ctx.fillRect(0, 0, canvas.width, canvas.height);
-      const pulseScale = 1 + Math.sin(frameCount * 0.04) * 0.3;
+      const warpT = Math.min(1, (warp - 1) / 15);
+      const pulseScale = 1 + Math.sin(frameCount * 0.04) * 0.3 + warpT * 3.2;
       const glowGrad = ctx.createRadialGradient(
         currentCenterX,
         currentCenterY,
@@ -717,28 +749,32 @@
         currentCenterY,
         90 * pulseScale
       );
-      glowGrad.addColorStop(0, "rgba(255, 213, 0, 0.25)");
-      glowGrad.addColorStop(0.4, "rgba(208, 16, 18, 0.1)");
+      glowGrad.addColorStop(0, `rgba(255, 250, 224, ${0.25 + warpT * 0.75})`);
+      glowGrad.addColorStop(0.4, `rgba(255, 213, 0, ${0.1 + warpT * 0.4})`);
       glowGrad.addColorStop(1, "rgba(0, 0, 0, 0)");
       ctx.fillStyle = glowGrad;
       ctx.fillRect(0, 0, canvas.width, canvas.height);
       ctx.save();
       ctx.translate(currentCenterX, currentCenterY);
+      const lineStretch = 1 + warpT * 9;
       speedLines.forEach((line) => {
         line.angle += line.speed;
         const cos = Math.cos(line.angle);
         const sin = Math.sin(line.angle);
         ctx.beginPath();
         ctx.moveTo(cos * line.innerRadius, sin * line.innerRadius);
-        ctx.lineTo(cos * (line.innerRadius + line.length), sin * (line.innerRadius + line.length));
-        ctx.strokeStyle = `rgba(255, 255, 255, ${line.alpha})`;
-        ctx.lineWidth = line.width;
+        ctx.lineTo(
+          cos * (line.innerRadius + line.length * lineStretch),
+          sin * (line.innerRadius + line.length * lineStretch)
+        );
+        ctx.strokeStyle = `rgba(255, 255, 255, ${Math.min(0.9, line.alpha * (1 + warpT * 5))})`;
+        ctx.lineWidth = line.width * (1 + warpT * 1.5);
         ctx.stroke();
       });
       ctx.restore();
       particles.sort((a, b) => b.z - a.z);
       particles.forEach((p) => {
-        const zSpeed = 6 + (1 - p.z / 1200) * 10;
+        const zSpeed = (6 + (1 - p.z / 1200) * 10) * warp;
         p.z -= zSpeed;
         p.angle += p.rotSpeed;
         if (p.z <= 1) {
@@ -817,10 +853,14 @@
       animationFrameId = requestAnimationFrame(draw);
     };
     draw();
+    tunnelWarp = (v) => {
+      warp = v;
+    };
     return () => {
       cancelAnimationFrame(animationFrameId);
       window.removeEventListener("resize", resize);
       window.removeEventListener("mousemove", onMouseMove);
+      if (tunnelWarp) tunnelWarp = null;
     };
   }
 
@@ -2524,7 +2564,7 @@
                      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:middle;margin-right:4px"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
                      Added to Bin
                    </div>` : `<button type="button" class="brick-btn brick-btn-small correct-btn"
-                           title="Change the detected shape or colour">Correct</button>
+                           title="Change the detected shape or colour">Edit</button>
                    <button type="button" class="brick-btn brick-btn-primary brick-btn-small add-to-bin-btn">Add to bin</button>`}
             </div>
           </div>
@@ -2580,6 +2620,141 @@
   var selectedColor = "All";
   var resizeObserver = null;
   var currentWidthClass = "width-wide";
+  function escapeHtml2(s) {
+    return String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  }
+  var RAINBOW = "linear-gradient(135deg,#D01012 0 25%,#FFD500 25% 50%,#1E7A34 50% 75%,#0057A6 75% 100%)";
+  function hueKey(hex) {
+    const h = String(hex || "").replace("#", "");
+    if (h.length !== 6) return [3, 0, 0];
+    const [r, g, b] = [0, 2, 4].map((i) => parseInt(h.slice(i, i + 2), 16) / 255);
+    const max = Math.max(r, g, b), min = Math.min(r, g, b), d = max - min;
+    const l = (max + min) / 2;
+    const sat = d === 0 ? 0 : d / (1 - Math.abs(2 * l - 1));
+    if (sat < 0.15) return [2, -l, 0];
+    let hue;
+    if (max === r) hue = ((g - b) / d + 6) % 6;
+    else if (max === g) hue = (b - r) / d + 2;
+    else hue = (r - g) / d + 4;
+    return [1, hue * 60, -l];
+  }
+  function bySpectrum(a, b) {
+    const ka = hueKey(a.hex), kb = hueKey(b.hex);
+    for (let i = 0; i < 3; i++) if (ka[i] !== kb[i]) return ka[i] - kb[i];
+    return a.label.localeCompare(b.label);
+  }
+  function colorFilterControl(parentEl) {
+    const wrap = document.createElement("div");
+    wrap.className = "color-filter-wrapper";
+    const colors = [];
+    const seen = /* @__PURE__ */ new Set();
+    inventoryItems.forEach((i) => {
+      const tag = resolveColorTag(i);
+      if (tag.label && !seen.has(tag.label)) {
+        seen.add(tag.label);
+        colors.push(tag);
+      }
+    });
+    colors.sort(bySpectrum);
+    const active = colors.find((c) => c.label === selectedColor);
+    const dotStyle = (hex) => `background:${hex || "transparent"};${hex ? "" : `background:${RAINBOW};`}`;
+    wrap.innerHTML = `
+    <button type="button" class="color-filter-btn font-display" id="inv-color-btn"
+            aria-haspopup="dialog" aria-expanded="false">
+      <span class="color-filter-dot" style="${dotStyle(active ? active.hex : null)}"></span>
+      <span class="color-filter-label">${selectedColor === "All" ? "Any colour" : escapeHtml2(selectedColor)}</span>
+      <svg class="color-filter-caret" width="10" height="10" viewBox="0 0 24 24" fill="none"
+           stroke="currentColor" stroke-width="4" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
+    </button>
+    <div class="color-filter-pop" hidden role="dialog" aria-label="Filter by colour">
+      <input type="search" class="color-filter-search font-body" placeholder="Search colours..." />
+      <div class="color-filter-grid" role="listbox" aria-label="Colours in your bin"></div>
+      <div class="color-filter-foot font-body"><span class="cf-hint">${colors.length} colours in your bin</span></div>
+    </div>
+  `;
+    const btn = wrap.querySelector("#inv-color-btn");
+    const pop = wrap.querySelector(".color-filter-pop");
+    const grid = wrap.querySelector(".color-filter-grid");
+    const search = wrap.querySelector(".color-filter-search");
+    const foot = wrap.querySelector(".cf-hint");
+    const choose = (label) => {
+      selectedColor = label;
+      close();
+      renderInventory(parentEl);
+    };
+    function renderGrid() {
+      const q = search.value.trim().toLowerCase();
+      const matches = colors.filter((c) => !q || c.label.toLowerCase().includes(q));
+      grid.innerHTML = "";
+      const all = document.createElement("button");
+      all.type = "button";
+      all.className = `color-filter-swatch is-all ${selectedColor === "All" ? "is-selected" : ""}`;
+      all.setAttribute("role", "option");
+      all.setAttribute("aria-selected", String(selectedColor === "All"));
+      all.title = "Any colour";
+      all.style.background = RAINBOW;
+      all.onclick = () => choose("All");
+      grid.appendChild(all);
+      matches.forEach((c) => {
+        const b = document.createElement("button");
+        b.type = "button";
+        const on = selectedColor === c.label;
+        b.className = `color-filter-swatch ${on ? "is-selected" : ""}`;
+        b.setAttribute("role", "option");
+        b.setAttribute("aria-selected", String(on));
+        b.title = c.label;
+        b.style.background = c.hex || "#CCC";
+        b.onclick = () => choose(c.label);
+        b.onmouseenter = () => {
+          foot.textContent = c.label;
+        };
+        b.onfocus = () => {
+          foot.textContent = c.label;
+        };
+        grid.appendChild(b);
+      });
+      if (!matches.length && q) {
+        const p = document.createElement("p");
+        p.className = "color-filter-empty font-body";
+        p.textContent = `No colour matches "${search.value}"`;
+        grid.appendChild(p);
+      }
+    }
+    const onDocClick = (e) => {
+      if (!wrap.contains(e.target)) close();
+    };
+    const onKey = (e) => {
+      if (e.key === "Escape") {
+        close();
+        btn.focus();
+      }
+    };
+    function open() {
+      pop.hidden = false;
+      btn.setAttribute("aria-expanded", "true");
+      document.addEventListener("mousedown", onDocClick);
+      document.addEventListener("keydown", onKey);
+      search.value = "";
+      renderGrid();
+      search.focus();
+    }
+    function close() {
+      if (pop.hidden) return;
+      pop.hidden = true;
+      btn.setAttribute("aria-expanded", "false");
+      document.removeEventListener("mousedown", onDocClick);
+      document.removeEventListener("keydown", onKey);
+    }
+    btn.onclick = () => {
+      pop.hidden ? open() : close();
+    };
+    search.oninput = renderGrid;
+    grid.onmouseleave = () => {
+      foot.textContent = selectedColor === "All" ? `${colors.length} colours in your bin` : selectedColor;
+    };
+    renderGrid();
+    return wrap;
+  }
   function renderInventory(parentEl) {
     parentEl.innerHTML = "";
     const container = document.createElement("div");
@@ -2622,82 +2797,34 @@
       renderListBody(container);
     };
     headerSearch.appendChild(searchBox);
-    const selectBox = document.createElement("div");
-    selectBox.className = "category-select-wrapper";
-    const categories = ["All", ...new Set(inventoryItems.map((i) => i.category))];
-    let selectOptions = categories.map((cat) => `<option value="${cat}" ${selectedCategory === cat ? "selected" : ""}>Type: ${cat}</option>`).join("");
-    selectBox.innerHTML = `
-    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" class="filter-icon"><rect x="3" y="9" width="18" height="10" rx="2" ry="2"></rect><circle cx="8" cy="5" r="2" fill="currentColor"></circle><circle cx="16" cy="5" r="2" fill="currentColor"></circle></svg>
-    <select class="category-select font-display" id="inv-category-select">
-      ${selectOptions}
-    </select>
-  `;
-    const categorySelect = selectBox.querySelector("#inv-category-select");
-    categorySelect.onchange = (e) => {
-      selectedCategory = e.target.value;
-      renderListBody(container);
-    };
-    headerSearch.appendChild(selectBox);
-    const colorSelectBox = document.createElement("div");
-    colorSelectBox.className = "category-select-wrapper color-filter-wrapper";
-    const invColors = [];
-    const seenColors = /* @__PURE__ */ new Set();
-    inventoryItems.forEach((i) => {
-      const tag = resolveColorTag(i);
-      if (tag.label && !seenColors.has(tag.label)) {
-        seenColors.add(tag.label);
-        invColors.push(tag);
-      }
-    });
-    invColors.sort((a, b) => a.label.localeCompare(b.label));
-    const activeTag = invColors.find((c) => c.label === selectedColor);
-    colorSelectBox.innerHTML = `
-    <button type="button" class="color-filter-btn font-display" id="inv-color-btn"
-            aria-haspopup="listbox" aria-expanded="false">
-      <span class="color-filter-dot" style="background:${activeTag ? activeTag.hex || "#CCC" : "transparent"};
-            ${activeTag ? "" : "background:linear-gradient(135deg,#D01012 0 25%,#FFD500 25% 50%,#1E7A34 50% 75%,#0057A6 75% 100%);"}"></span>
-      <span class="color-filter-label">${selectedColor === "All" ? "All colours" : selectedColor}</span>
-    </button>
-    <div class="color-filter-pop" hidden role="listbox" aria-label="Filter by colour"></div>
-  `;
-    const colorBtn = colorSelectBox.querySelector("#inv-color-btn");
-    const colorPop = colorSelectBox.querySelector(".color-filter-pop");
-    function renderColorPop() {
-      colorPop.innerHTML = "";
-      const mkOption = (label, hex) => {
-        const b = document.createElement("button");
-        b.type = "button";
-        b.className = `color-filter-option ${selectedColor === label ? "is-selected" : ""}`;
-        b.setAttribute("role", "option");
-        b.innerHTML = `<span class="color-filter-dot" style="background:${hex || "transparent"};
-        ${hex ? "" : "background:linear-gradient(135deg,#D01012 0 25%,#FFD500 25% 50%,#1E7A34 50% 75%,#0057A6 75% 100%);"}"></span>
-        <span>${label}</span>`;
-        b.onclick = () => {
-          selectedColor = label;
-          colorPop.hidden = true;
-          colorBtn.setAttribute("aria-expanded", "false");
-          renderInventory(parentEl);
-        };
-        return b;
-      };
-      colorPop.appendChild(mkOption("All", null));
-      invColors.forEach((c) => colorPop.appendChild(mkOption(c.label, c.hex)));
-    }
-    renderColorPop();
-    colorBtn.onclick = (e) => {
-      e.stopPropagation();
-      const open = colorPop.hidden;
-      colorPop.hidden = !open;
-      colorBtn.setAttribute("aria-expanded", String(open));
-    };
-    document.addEventListener("click", () => {
-      if (!colorPop.hidden) {
-        colorPop.hidden = true;
-        colorBtn.setAttribute("aria-expanded", "false");
-      }
-    }, { once: true });
-    headerSearch.appendChild(colorSelectBox);
+    headerSearch.appendChild(colorFilterControl(parentEl));
     container.appendChild(headerSearch);
+    const typeRow = document.createElement("div");
+    typeRow.className = "inv-type-chips";
+    typeRow.setAttribute("role", "tablist");
+    typeRow.setAttribute("aria-label", "Filter by part type");
+    const catCounts = /* @__PURE__ */ new Map();
+    inventoryItems.forEach((i) => {
+      catCounts.set(i.category, (catCounts.get(i.category) || 0) + (i.quantity || 0));
+    });
+    const totalQty = [...catCounts.values()].reduce((a, b) => a + b, 0);
+    const mkChip = (label, count) => {
+      const chip = document.createElement("button");
+      chip.type = "button";
+      const on = selectedCategory === label;
+      chip.className = `inv-type-chip font-display ${on ? "is-active" : ""}`;
+      chip.setAttribute("role", "tab");
+      chip.setAttribute("aria-selected", String(on));
+      chip.innerHTML = `${escapeHtml2(label)} <span class="inv-chip-count">${count}</span>`;
+      chip.onclick = () => {
+        selectedCategory = label;
+        renderInventory(parentEl);
+      };
+      return chip;
+    };
+    typeRow.appendChild(mkChip("All", totalQty));
+    [...catCounts.keys()].sort().forEach((cat) => typeRow.appendChild(mkChip(cat, catCounts.get(cat))));
+    container.appendChild(typeRow);
     const totalsBar = document.createElement("div");
     totalsBar.className = "inventory-running-totals font-display";
     totalsBar.id = "inv-totals-bar";

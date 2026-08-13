@@ -25,6 +25,184 @@ let selectedColor = 'All';
 let resizeObserver = null;
 let currentWidthClass = 'width-wide';
 
+function escapeHtml(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+const RAINBOW = 'linear-gradient(135deg,#D01012 0 25%,#FFD500 25% 50%,#1E7A34 50% 75%,#0057A6 75% 100%)';
+
+/**
+ * Sort key that puts colours in spectrum order rather than alphabetical.
+ *
+ * Alphabetical is actively unhelpful for colour: it separates "Bright Light
+ * Blue" from "Blue" by twenty entries and interleaves greys through the
+ * middle. Sorting by hue groups the blues together, so scanning for a colour
+ * means looking at the part of the grid where that colour lives.
+ *
+ * Greys and near-blacks/whites have no meaningful hue, so they are pushed to
+ * the end as a neutrals run, ordered light to dark.
+ */
+function hueKey(hex) {
+  const h = String(hex || '').replace('#', '');
+  if (h.length !== 6) return [3, 0, 0];
+  const [r, g, b] = [0, 2, 4].map(i => parseInt(h.slice(i, i + 2), 16) / 255);
+  const max = Math.max(r, g, b), min = Math.min(r, g, b), d = max - min;
+  const l = (max + min) / 2;
+  const sat = d === 0 ? 0 : d / (1 - Math.abs(2 * l - 1));
+  if (sat < 0.15) return [2, -l, 0];          // neutral: light -> dark
+  let hue;
+  if (max === r) hue = ((g - b) / d + 6) % 6;
+  else if (max === g) hue = (b - r) / d + 2;
+  else hue = (r - g) / d + 4;
+  return [1, hue * 60, -l];
+}
+
+function bySpectrum(a, b) {
+  const ka = hueKey(a.hex), kb = hueKey(b.hex);
+  for (let i = 0; i < 3; i++) if (ka[i] !== kb[i]) return ka[i] - kb[i];
+  return a.label.localeCompare(b.label);
+}
+
+/**
+ * Colour filter: a button that opens a grid of real swatches.
+ *
+ * Two things were wrong with the previous version.
+ *
+ * It was a vertical LIST - one full-width row per colour - so a bin spanning
+ * thirty colours meant thirty rows of scrolling inside a 230px popover. A
+ * grid of swatches shows the same thirty in four rows, and colour is a thing
+ * you recognise by sight, so the name is secondary and belongs on the tooltip
+ * and the footer rather than taking a row each.
+ *
+ * More seriously, it could get stuck open permanently. The dismiss handler was
+ * registered once per render with { once: true }, so the first click anywhere
+ * - the search box, a part card, anything - consumed it while the popover was
+ * still closed. From then on nothing was listening, and the next time the
+ * popover opened there was no handler left to close it. The listener is now
+ * bound when the popover opens and removed when it closes, so its lifetime
+ * matches the thing it dismisses.
+ */
+function colorFilterControl(parentEl) {
+  const wrap = document.createElement('div');
+  wrap.className = 'color-filter-wrapper';
+
+  const colors = [];
+  const seen = new Set();
+  inventoryItems.forEach(i => {
+    const tag = resolveColorTag(i);
+    if (tag.label && !seen.has(tag.label)) {
+      seen.add(tag.label);
+      colors.push(tag);
+    }
+  });
+  colors.sort(bySpectrum);
+
+  const active = colors.find(c => c.label === selectedColor);
+  const dotStyle = (hex) => `background:${hex || 'transparent'};${hex ? '' : `background:${RAINBOW};`}`;
+
+  wrap.innerHTML = `
+    <button type="button" class="color-filter-btn font-display" id="inv-color-btn"
+            aria-haspopup="dialog" aria-expanded="false">
+      <span class="color-filter-dot" style="${dotStyle(active ? active.hex : null)}"></span>
+      <span class="color-filter-label">${selectedColor === 'All' ? 'Any colour' : escapeHtml(selectedColor)}</span>
+      <svg class="color-filter-caret" width="10" height="10" viewBox="0 0 24 24" fill="none"
+           stroke="currentColor" stroke-width="4" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
+    </button>
+    <div class="color-filter-pop" hidden role="dialog" aria-label="Filter by colour">
+      <input type="search" class="color-filter-search font-body" placeholder="Search colours..." />
+      <div class="color-filter-grid" role="listbox" aria-label="Colours in your bin"></div>
+      <div class="color-filter-foot font-body"><span class="cf-hint">${colors.length} colours in your bin</span></div>
+    </div>
+  `;
+
+  const btn = wrap.querySelector('#inv-color-btn');
+  const pop = wrap.querySelector('.color-filter-pop');
+  const grid = wrap.querySelector('.color-filter-grid');
+  const search = wrap.querySelector('.color-filter-search');
+  const foot = wrap.querySelector('.cf-hint');
+
+  const choose = (label) => {
+    selectedColor = label;
+    close();
+    renderInventory(parentEl);
+  };
+
+  function renderGrid() {
+    const q = search.value.trim().toLowerCase();
+    const matches = colors.filter(c => !q || c.label.toLowerCase().includes(q));
+    grid.innerHTML = '';
+
+    // "Any colour" is a tile in the grid rather than a separate row, so
+    // clearing the filter is in the same place as setting it.
+    const all = document.createElement('button');
+    all.type = 'button';
+    all.className = `color-filter-swatch is-all ${selectedColor === 'All' ? 'is-selected' : ''}`;
+    all.setAttribute('role', 'option');
+    all.setAttribute('aria-selected', String(selectedColor === 'All'));
+    all.title = 'Any colour';
+    all.style.background = RAINBOW;
+    all.onclick = () => choose('All');
+    grid.appendChild(all);
+
+    matches.forEach(c => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      const on = selectedColor === c.label;
+      b.className = `color-filter-swatch ${on ? 'is-selected' : ''}`;
+      b.setAttribute('role', 'option');
+      b.setAttribute('aria-selected', String(on));
+      b.title = c.label;
+      b.style.background = c.hex || '#CCC';
+      b.onclick = () => choose(c.label);
+      // Hovering names the colour without needing a row of its own.
+      b.onmouseenter = () => { foot.textContent = c.label; };
+      b.onfocus = () => { foot.textContent = c.label; };
+      grid.appendChild(b);
+    });
+
+    if (!matches.length && q) {
+      const p = document.createElement('p');
+      p.className = 'color-filter-empty font-body';
+      p.textContent = `No colour matches "${search.value}"`;
+      grid.appendChild(p);
+    }
+  }
+
+  // Bound only while the popover is open. See the note above: tying these to
+  // the render instead is what made it possible to strand it open.
+  const onDocClick = (e) => { if (!wrap.contains(e.target)) close(); };
+  const onKey = (e) => { if (e.key === 'Escape') { close(); btn.focus(); } };
+
+  function open() {
+    pop.hidden = false;
+    btn.setAttribute('aria-expanded', 'true');
+    document.addEventListener('mousedown', onDocClick);
+    document.addEventListener('keydown', onKey);
+    search.value = '';
+    renderGrid();
+    search.focus();
+  }
+  function close() {
+    if (pop.hidden) return;
+    pop.hidden = true;
+    btn.setAttribute('aria-expanded', 'false');
+    document.removeEventListener('mousedown', onDocClick);
+    document.removeEventListener('keydown', onKey);
+  }
+
+  btn.onclick = () => { pop.hidden ? open() : close(); };
+  search.oninput = renderGrid;
+  grid.onmouseleave = () => {
+    foot.textContent = selectedColor === 'All'
+      ? `${colors.length} colours in your bin` : selectedColor;
+  };
+
+  renderGrid();
+  return wrap;
+}
+
 /**
  * Renders the Inventory Panel in Vanilla JS
  * Binds search hooks and category selects
@@ -86,103 +264,45 @@ export function renderInventory(parentEl) {
   };
   headerSearch.appendChild(searchBox);
 
-  // Category select
-  const selectBox = document.createElement('div');
-  selectBox.className = 'category-select-wrapper';
-  
-  const categories = ['All', ...new Set(inventoryItems.map(i => i.category))];
-  let selectOptions = categories.map(cat => `<option value="${cat}" ${selectedCategory === cat ? 'selected' : ''}>Type: ${cat}</option>`).join('');
-
-  selectBox.innerHTML = `
-    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" class="filter-icon"><rect x="3" y="9" width="18" height="10" rx="2" ry="2"></rect><circle cx="8" cy="5" r="2" fill="currentColor"></circle><circle cx="16" cy="5" r="2" fill="currentColor"></circle></svg>
-    <select class="category-select font-display" id="inv-category-select">
-      ${selectOptions}
-    </select>
-  `;
-  const categorySelect = selectBox.querySelector('#inv-category-select');
-  categorySelect.onchange = (e) => {
-    selectedCategory = e.target.value;
-    renderListBody(container);
-  };
-  headerSearch.appendChild(selectBox);
-
-  // Colour filter.
-  //
-  // Was a plain <select> whose options came from parsing the colour back out
-  // of each part name - so it listed our informal labels and showed no hint
-  // of what any colour actually looks like. It now lists the official colour
-  // names the API returns, each with its true swatch, in a popover. Native
-  // <option> elements cannot be styled with a colour reliably across
-  // browsers, which is why this is a button plus popover rather than a
-  // dressed-up select.
-  const colorSelectBox = document.createElement('div');
-  colorSelectBox.className = 'category-select-wrapper color-filter-wrapper';
-
-  const invColors = [];
-  const seenColors = new Set();
-  inventoryItems.forEach(i => {
-    const tag = resolveColorTag(i);
-    if (tag.label && !seenColors.has(tag.label)) {
-      seenColors.add(tag.label);
-      invColors.push(tag);
-    }
-  });
-  invColors.sort((a, b) => a.label.localeCompare(b.label));
-
-  const activeTag = invColors.find(c => c.label === selectedColor);
-  colorSelectBox.innerHTML = `
-    <button type="button" class="color-filter-btn font-display" id="inv-color-btn"
-            aria-haspopup="listbox" aria-expanded="false">
-      <span class="color-filter-dot" style="background:${activeTag ? activeTag.hex || '#CCC' : 'transparent'};
-            ${activeTag ? '' : 'background:linear-gradient(135deg,#D01012 0 25%,#FFD500 25% 50%,#1E7A34 50% 75%,#0057A6 75% 100%);'}"></span>
-      <span class="color-filter-label">${selectedColor === 'All' ? 'All colours' : selectedColor}</span>
-    </button>
-    <div class="color-filter-pop" hidden role="listbox" aria-label="Filter by colour"></div>
-  `;
-  const colorBtn = colorSelectBox.querySelector('#inv-color-btn');
-  const colorPop = colorSelectBox.querySelector('.color-filter-pop');
-
-  function renderColorPop() {
-    colorPop.innerHTML = '';
-    const mkOption = (label, hex) => {
-      const b = document.createElement('button');
-      b.type = 'button';
-      b.className = `color-filter-option ${selectedColor === label ? 'is-selected' : ''}`;
-      b.setAttribute('role', 'option');
-      b.innerHTML = `<span class="color-filter-dot" style="background:${hex || 'transparent'};
-        ${hex ? '' : 'background:linear-gradient(135deg,#D01012 0 25%,#FFD500 25% 50%,#1E7A34 50% 75%,#0057A6 75% 100%);'}"></span>
-        <span>${label}</span>`;
-      b.onclick = () => {
-        selectedColor = label;
-        colorPop.hidden = true;
-        colorBtn.setAttribute('aria-expanded', 'false');
-        renderInventory(parentEl);
-      };
-      return b;
-    };
-    colorPop.appendChild(mkOption('All', null));
-    invColors.forEach(c => colorPop.appendChild(mkOption(c.label, c.hex)));
-  }
-  renderColorPop();
-
-  colorBtn.onclick = (e) => {
-    e.stopPropagation();
-    const open = colorPop.hidden;
-    colorPop.hidden = !open;
-    colorBtn.setAttribute('aria-expanded', String(open));
-  };
-  // Any click elsewhere dismisses it, so the popover cannot be left hanging
-  // over the workspace.
-  document.addEventListener('click', () => {
-    if (!colorPop.hidden) {
-      colorPop.hidden = true;
-      colorBtn.setAttribute('aria-expanded', 'false');
-    }
-  }, { once: true });
-
-  headerSearch.appendChild(colorSelectBox);
-
+  headerSearch.appendChild(colorFilterControl(parentEl));
   container.appendChild(headerSearch);
+
+  // Type filter.
+  //
+  // Was a native <select> reading "Type: All". It gave no sense of how much
+  // was in each category, took two clicks to change, and looked like a form
+  // control dropped into a workspace that has none anywhere else. Chips show
+  // every category and its count at a glance, change filter in one click, and
+  // match the shape picker in the Add Part panel.
+  const typeRow = document.createElement('div');
+  typeRow.className = 'inv-type-chips';
+  typeRow.setAttribute('role', 'tablist');
+  typeRow.setAttribute('aria-label', 'Filter by part type');
+
+  const catCounts = new Map();
+  inventoryItems.forEach(i => {
+    catCounts.set(i.category, (catCounts.get(i.category) || 0) + (i.quantity || 0));
+  });
+  const totalQty = [...catCounts.values()].reduce((a, b) => a + b, 0);
+
+  const mkChip = (label, count) => {
+    const chip = document.createElement('button');
+    chip.type = 'button';
+    const on = selectedCategory === label;
+    chip.className = `inv-type-chip font-display ${on ? 'is-active' : ''}`;
+    chip.setAttribute('role', 'tab');
+    chip.setAttribute('aria-selected', String(on));
+    chip.innerHTML = `${escapeHtml(label)} <span class="inv-chip-count">${count}</span>`;
+    chip.onclick = () => {
+      selectedCategory = label;
+      renderInventory(parentEl);
+    };
+    return chip;
+  };
+  typeRow.appendChild(mkChip('All', totalQty));
+  [...catCounts.keys()].sort().forEach(cat => typeRow.appendChild(mkChip(cat, catCounts.get(cat))));
+  container.appendChild(typeRow);
+
 
   // Running totals bar
   const totalsBar = document.createElement('div');

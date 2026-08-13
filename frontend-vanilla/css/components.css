@@ -511,12 +511,20 @@
   flex: 1 1 100%;
 }
 
-.width-narrow .category-select-wrapper {
+.width-narrow .color-filter-wrapper {
   flex: 1;
 }
 
-.width-narrow .category-select {
+.width-narrow .color-filter-btn {
   width: 100%;
+  max-width: none;
+}
+
+/* The colour popover is right-anchored to a button that is itself near the
+   panel's right edge; in a narrow panel that pushed it off-screen. */
+.width-narrow .color-filter-pop,
+.width-medium .color-filter-pop {
+  width: min(244px, calc(100vw - 32px));
 }
 
 .search-box-wrapper {
@@ -545,37 +553,8 @@
   outline: none;
 }
 
-.category-select-wrapper {
-  position: relative;
-  display: flex;
-  align-items: center;
-}
-
-.filter-icon {
-  position: absolute;
-  left: 8px;
-  color: var(--grey-600);
-  pointer-events: none;
-  display: flex;
-  align-items: center;
-}
-
-.category-select {
-  border: 2px solid var(--ink-900);
-  border-radius: 8px;
-  padding: 6px 8px 6px 26px;
-  font-size: 0.8rem;
-  font-weight: 700;
-  background-color: var(--bg-card);
-  color: var(--ink-900);
-  outline: none;
-  cursor: pointer;
-}
-
-.category-select option {
-  background-color: var(--bg-card);
-  color: var(--ink-900);
-}
+/* The .category-select <select> that lived here is gone - replaced by the
+   .inv-type-chips row, which shows every category and its count at once. */
 
 .inventory-running-totals {
   display: flex;
@@ -2084,40 +2063,132 @@ input[type=number] {
   white-space: nowrap;
 }
 
+.color-filter-caret { flex-shrink: 0; opacity: 0.55; }
+
 .color-filter-pop {
   position: absolute;
   top: calc(100% + 4px);
   right: 0;
   z-index: 40;
-  min-width: 168px;
-  max-height: 230px;
-  overflow-y: auto;
+  width: 244px;
   background: var(--white);
   border: 2.5px solid var(--ink-900);
   border-radius: 8px;
   box-shadow: 0 4px 0 var(--ink-900);
-  padding: 4px;
+  padding: 7px;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 6px;
 }
 
-.color-filter-option {
-  display: flex;
-  align-items: center;
-  gap: 7px;
+.color-filter-pop[hidden] { display: none; }
+
+.color-filter-search {
   width: 100%;
-  padding: 5px 7px;
-  border: none;
-  border-radius: 5px;
-  background: transparent;
-  cursor: pointer;
-  font-family: var(--font-display);
-  font-size: 0.66rem;
-  font-weight: 700;
+  border: 2px solid var(--ink-900);
+  border-radius: 6px;
+  padding: 4px 7px;
+  font-size: 0.7rem;
+  outline: none;
+  background: var(--bg-card);
   color: var(--ink-900);
-  text-align: left;
 }
 
-.color-filter-option:hover { background: var(--cream-100); }
-.color-filter-option.is-selected { background: var(--ink-900); color: var(--white); }
+/* Swatches in a grid, not a list.
+   A list gave every colour a full-width row, so thirty colours meant thirty
+   rows of scrolling. Seven per row fits the same thirty in five rows with no
+   scrolling at all - and colour is recognised by sight, so the name belongs
+   on hover and in the footer rather than costing a row each. */
+.color-filter-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 4px;
+  max-height: 190px;
+  overflow-y: auto;
+  align-content: start;
+}
+
+.color-filter-swatch {
+  aspect-ratio: 1;
+  width: 100%;
+  border: 2px solid var(--ink-900);
+  border-radius: 5px;
+  cursor: pointer;
+  padding: 0;
+  transition: transform 0.08s ease;
+}
+
+.color-filter-swatch:hover { transform: scale(1.14); }
+
+/* Selected reads as a ring rather than a border colour, so it stays legible
+   on a white swatch and on a black one alike. */
+.color-filter-swatch.is-selected {
+  outline: 2.5px solid var(--lego-yellow, #FFD500);
+  outline-offset: 1.5px;
+  transform: scale(1.08);
+}
+
+.color-filter-empty {
+  grid-column: 1 / -1;
+  font-size: 0.68rem;
+  color: var(--grey-600);
+  margin: 6px 2px;
+}
+
+.color-filter-foot {
+  font-size: 0.64rem;
+  font-weight: 700;
+  color: var(--grey-600);
+  border-top: 1.5px dashed rgba(34, 34, 42, 0.2);
+  padding-top: 5px;
+  min-height: 1.1em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Part-type filter chips. Replaces a native <select> that showed no counts
+   and took two clicks; these show the whole distribution at a glance. */
+.inv-type-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 8px 0 2px;
+}
+
+.inv-type-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.6rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  padding: 3px 7px 3px 9px;
+  border: 2px solid var(--ink-900);
+  border-radius: 999px;
+  background: var(--white);
+  color: var(--ink-900);
+  cursor: pointer;
+  line-height: 1.3;
+  transition: background-color 0.1s ease, transform 0.08s ease;
+}
+
+.inv-type-chip:hover { transform: translateY(-1px); }
+.inv-type-chip.is-active { background: var(--ink-900); color: var(--white); }
+
+.inv-chip-count {
+  font-size: 0.58rem;
+  font-weight: 900;
+  background: rgba(34, 34, 42, 0.12);
+  border-radius: 999px;
+  padding: 1px 5px;
+  min-width: 16px;
+  text-align: center;
+}
+
+.inv-type-chip.is-active .inv-chip-count {
+  background: rgba(255, 255, 255, 0.25);
+}
+
+/* The one-row-per-colour list this replaced is gone; see .color-filter-grid. */

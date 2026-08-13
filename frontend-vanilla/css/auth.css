@@ -261,25 +261,34 @@
   overflow: hidden;
 }
 
+/* Phase 1: the core sits at the vanishing point and tightens as the tunnel
+   accelerates around it. --charge is written each frame by the JS driving the
+   canvas, so the DOM core and the canvas glow build in lockstep instead of
+   running on two independent clocks that drift apart. */
 .login-warp-core {
+  --charge: 0;
   width: 18px;
   height: 18px;
   border-radius: 50%;
   background: var(--cream-100, #F6F1E4);
+  transform: scale(calc(0.25 + var(--charge) * 0.85));
+  opacity: calc(0.35 + var(--charge) * 0.65);
   box-shadow:
-    0 0 0 0 rgba(255, 213, 0, 0.55),
-    0 0 26px 10px rgba(255, 255, 255, 0.85);
-  /* Scaled far past the viewport so the circle's edge is well off-screen by
-     the end - otherwise a curved seam is visible at the corners. */
-  animation: login-warp-expand 900ms cubic-bezier(0.65, 0, 0.35, 1) forwards;
+    0 0 calc(18px + var(--charge) * 70px) calc(6px + var(--charge) * 26px)
+      rgba(255, 255, 255, calc(0.55 + var(--charge) * 0.45)),
+    0 0 0 calc(var(--charge) * 10px) rgba(255, 213, 0, 0.35);
+}
+
+/* Phase 2: expand past the viewport. Scaled far beyond it so the circle's
+   edge is well off-screen by the end - otherwise a curved seam shows at the
+   corners. The transform/opacity above are overridden by the animation. */
+.login-warp-core.is-opening {
+  animation: login-warp-expand 620ms cubic-bezier(0.6, 0, 0.3, 1) forwards;
 }
 
 @keyframes login-warp-expand {
-  0%   { transform: scale(0.35); opacity: 0; }
-  12%  { opacity: 1; }
-  55%  { box-shadow: 0 0 0 14px rgba(255, 213, 0, 0.35),
-                     0 0 60px 22px rgba(255, 255, 255, 0.9); }
-  100% { transform: scale(160); opacity: 1;
+  0%   { transform: scale(1.1); opacity: 1; }
+  100% { transform: scale(170); opacity: 1;
          box-shadow: 0 0 0 0 rgba(255, 213, 0, 0), 0 0 0 0 rgba(255,255,255,0); }
 }
 

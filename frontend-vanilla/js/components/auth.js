@@ -27,29 +27,89 @@ let activeCancelAnimation = null;
  *
  * Honours prefers-reduced-motion by resolving immediately.
  */
+// Set by initBrickTunnelAnimation while the login screen's canvas is alive.
+// Null once it is torn down, which is why every use is guarded.
+let tunnelWarp = null;
+
+const WARP_CHARGE_MS = 780;   // accelerating toward the singularity
+const WARP_PEAK = 16;         // multiple of idle tunnel speed at the end
+const WARP_OPEN_MS = 620;     // aperture expanding into the workspace
+
+/**
+ * Sign-in transition: fly into the tunnel, then open out of it.
+ *
+ * The first version simply grew a white circle. That read as a wipe rather
+ * than as movement, because nothing in the scene changed to suggest travel -
+ * the tunnel behind it carried on drifting at the same idle speed.
+ *
+ * Now it runs in two phases against the tunnel the user is already watching:
+ *
+ *   1. Charge (780ms). The warp multiplier ramps 1 -> 16 on a cubic curve, so
+ *      it starts almost imperceptibly and ends violently. Bricks accelerate
+ *      past, the radial streaks stretch to nine times their length, and the
+ *      vanishing point swells into a white core. Cubic rather than linear
+ *      matters: a linear ramp feels like a speed change, an accelerating one
+ *      feels like falling.
+ *
+ *   2. Open (620ms). The core - already bright and centred on the vanishing
+ *      point - expands past the viewport, revealing the workspace. Because it
+ *      grows out of exactly the point everything has been rushing toward, it
+ *      reads as arriving somewhere rather than as a new layer covering things.
+ */
 export function playLoginTransition() {
   const reduce = window.matchMedia
     && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  if (reduce) return Promise.resolve();
+  if (reduce) {
+    if (tunnelWarp) tunnelWarp(1);
+    return Promise.resolve();
+  }
 
   return new Promise((resolve) => {
     const overlay = document.createElement('div');
     overlay.className = 'login-warp';
     overlay.innerHTML = '<span class="login-warp-core"></span>';
     document.body.appendChild(overlay);
-
     const core = overlay.firstElementChild;
-    // Hand control back once the aperture fills the screen; the fade-out
-    // afterwards is purely decorative and must not delay the workspace.
+
+    let finished = false;
     const done = () => {
+      if (finished) return;
+      finished = true;
+      if (tunnelWarp) tunnelWarp(1);      // leave the tunnel as we found it
       overlay.classList.add('is-clearing');
       setTimeout(() => overlay.remove(), 620);
       resolve();
     };
-    core.addEventListener('animationend', done, { once: true });
+
+    // Phase 2 is a CSS animation so the browser can run the scale on the
+    // compositor, which keeps it smooth even while the canvas is busy.
+    const openAperture = () => {
+      core.classList.add('is-opening');
+      core.addEventListener('animationend', done, { once: true });
+      setTimeout(done, WARP_OPEN_MS + 350);
+    };
+
+    // Phase 1 is driven from JS because it has to steer the canvas, which no
+    // CSS animation can reach.
+    const start = performance.now();
+    const step = (now) => {
+      const t = Math.min(1, (now - start) / WARP_CHARGE_MS);
+      const eased = t * t * t;                       // slow build, hard finish
+      if (tunnelWarp) tunnelWarp(1 + eased * (WARP_PEAK - 1));
+      core.style.setProperty('--charge', String(eased));
+      if (t < 1) {
+        requestAnimationFrame(step);
+      } else {
+        openAperture();
+      }
+    };
+    requestAnimationFrame(step);
+
     // Never strand the user on the login screen if the animation is dropped
-    // (background tab, reduced GPU, interrupted paint).
-    setTimeout(done, 1400);
+    // (background tab, reduced GPU, interrupted paint). rAF does not run in a
+    // hidden tab at all, so this is the only thing that resolves the promise
+    // if the user switches away mid-sign-in.
+    setTimeout(done, WARP_CHARGE_MS + WARP_OPEN_MS + 700);
   });
 }
 
@@ -257,7 +317,13 @@ function createInputGroup(label, type, name, placeholder, value, iconHtml) {
 function initBrickTunnelAnimation(canvas) {
   const ctx = canvas.getContext('2d');
   let animationFrameId = null;
-  
+
+  // Warp multiplier, driven by playLoginTransition. 1 is the idle drift the
+  // login screen sits at; the sign-in transition ramps it up so the tunnel
+  // the user has been looking at all along is the thing that accelerates,
+  // rather than a separate effect appearing on top of it.
+  let warp = 1;
+
   const resize = () => {
     canvas.width = window.innerWidth;
     canvas.height = window.innerHeight;
@@ -338,31 +404,39 @@ function initBrickTunnelAnimation(canvas) {
     ctx.fillStyle = grad;
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     
-    // Draw pulsating glow ring at vanishing point
-    const pulseScale = 1 + Math.sin(frameCount * 0.04) * 0.3;
+    // Draw pulsating glow ring at vanishing point. Under warp this swells
+    // into the bright core the aperture then opens out of, so the point the
+    // user appears to be flying toward is the point the workspace unfolds
+    // from - one continuous movement rather than two separate effects.
+    const warpT = Math.min(1, (warp - 1) / 15);
+    const pulseScale = 1 + Math.sin(frameCount * 0.04) * 0.3 + warpT * 3.2;
     const glowGrad = ctx.createRadialGradient(
       currentCenterX, currentCenterY, 0,
       currentCenterX, currentCenterY, 90 * pulseScale
     );
-    glowGrad.addColorStop(0, 'rgba(255, 213, 0, 0.25)');
-    glowGrad.addColorStop(0.4, 'rgba(208, 16, 18, 0.1)');
+    glowGrad.addColorStop(0, `rgba(255, 250, 224, ${0.25 + warpT * 0.75})`);
+    glowGrad.addColorStop(0.4, `rgba(255, 213, 0, ${0.1 + warpT * 0.4})`);
     glowGrad.addColorStop(1, 'rgba(0, 0, 0, 0)');
     ctx.fillStyle = glowGrad;
     ctx.fillRect(0, 0, canvas.width, canvas.height);
-    
-    // Draw speed lines (radial streaks)
+
+    // Draw speed lines (radial streaks). They stretch and brighten with warp,
+    // which is what actually sells the acceleration - individual bricks move
+    // too fast to track, so the streaks carry the sense of speed.
     ctx.save();
     ctx.translate(currentCenterX, currentCenterY);
+    const lineStretch = 1 + warpT * 9;
     speedLines.forEach(line => {
       line.angle += line.speed;
       const cos = Math.cos(line.angle);
       const sin = Math.sin(line.angle);
-      
+
       ctx.beginPath();
       ctx.moveTo(cos * line.innerRadius, sin * line.innerRadius);
-      ctx.lineTo(cos * (line.innerRadius + line.length), sin * (line.innerRadius + line.length));
-      ctx.strokeStyle = `rgba(255, 255, 255, ${line.alpha})`;
-      ctx.lineWidth = line.width;
+      ctx.lineTo(cos * (line.innerRadius + line.length * lineStretch),
+                 sin * (line.innerRadius + line.length * lineStretch));
+      ctx.strokeStyle = `rgba(255, 255, 255, ${Math.min(0.9, line.alpha * (1 + warpT * 5))})`;
+      ctx.lineWidth = line.width * (1 + warpT * 1.5);
       ctx.stroke();
     });
     ctx.restore();
@@ -371,8 +445,9 @@ function initBrickTunnelAnimation(canvas) {
     particles.sort((a, b) => b.z - a.z);
     
     particles.forEach(p => {
-      // Accelerate as bricks get closer (warp speed effect)
-      const zSpeed = 6 + (1 - p.z / 1200) * 10;
+      // Accelerate as bricks get closer (warp speed effect), then multiply
+      // the whole field by the transition's warp ramp.
+      const zSpeed = (6 + (1 - p.z / 1200) * 10) * warp;
       p.z -= zSpeed;
       p.angle += p.rotSpeed;
       
@@ -478,11 +553,14 @@ function initBrickTunnelAnimation(canvas) {
   };
   
   draw();
-  
+
+  tunnelWarp = (v) => { warp = v; };
+
   return () => {
     cancelAnimationFrame(animationFrameId);
     window.removeEventListener('resize', resize);
     window.removeEventListener('mousemove', onMouseMove);
+    if (tunnelWarp) tunnelWarp = null;
   };
 }
 

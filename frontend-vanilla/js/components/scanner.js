@@ -394,7 +394,7 @@ function renderResults(parent) {
                      Added to Bin
                    </div>`
                 : `<button type="button" class="brick-btn brick-btn-small correct-btn"
-                           title="Change the detected shape or colour">Correct</button>
+                           title="Change the detected shape or colour">Edit</button>
                    <button type="button" class="brick-btn brick-btn-primary brick-btn-small add-to-bin-btn">Add to bin</button>`
               }
             </div>
