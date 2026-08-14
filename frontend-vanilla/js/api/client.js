@@ -1,10 +1,43 @@
 // js/api/client.js
 
-// Set IS_MOCKED = true to run the UI standalone against js/api/fixtures.js
-// with no backend (how Deliverable 1 was demonstrated).
-// Set it to false to talk to the deployed AWS backend.
-export const IS_MOCKED = false;
+// Where the app gets its data. Decided at load, not hard-coded, so the same
+// build can be marked, demonstrated and deployed without editing source.
+//
+//   offline   everything from js/api/fixtures.js, no network at all. This is
+//             what a marker gets by opening the folder locally: sign-in,
+//             cataloguing, inventory, builds and emails all work, and the
+//             scanner returns a fixed sample result instead of calling
+//             Rekognition. Nothing needs AWS credentials or a running model.
+//   live      the deployed AWS backend.
+//
+// Chosen by, in order:
+//   ?mock=1 / ?live=1     explicit, and wins over everything
+//   file:// or localhost  offline, because that is a developer or a marker
+//   anything else         live, because that is the deployed site
+//
+// The point of the host check is that "download it and open index.html"
+// should just work. Requiring someone to flip a constant and re-run a build
+// step first is exactly the instruction people skip.
+function resolveMockMode() {
+  try {
+    const q = new URLSearchParams(window.location.search);
+    if (q.get('mock') === '1') return true;
+    if (q.get('live') === '1') return false;
+    const h = window.location.hostname;
+    return window.location.protocol === 'file:' ||
+           h === 'localhost' || h === '127.0.0.1' || h === '' || h === '[::1]';
+  } catch (_) {
+    return false;
+  }
+}
+
+export const IS_MOCKED = resolveMockMode();
 export const API_BASE_URL = 'https://w45s12yx64.execute-api.ap-southeast-1.amazonaws.com/prod';
+
+if (IS_MOCKED) {
+  console.info('BRICKED-UP: offline mode - sample data, no AWS calls. ' +
+               'Add ?live=1 to use the deployed backend.');
+}
 
 // ---------------------------------------------------------------------------
 // Session

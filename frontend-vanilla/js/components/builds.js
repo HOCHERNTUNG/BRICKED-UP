@@ -1,8 +1,7 @@
-import { getBuilds, getBuildDetail } from '../api/builds.js';
+import { getBuilds, getBuildDetail, emailMissingParts } from '../api/builds.js';
 import { spawnStandalonePanel } from '../hooks/state.js';
 import { partImageAttrs } from '../api/partImage.js';
 import { openLightbox } from '../hooks/lightbox.js';
-import { API_BASE_URL, authHeader, ensureFreshToken } from '../api/client.js';
 import { showToast } from '../hooks/toast.js';
 
 /**
@@ -16,14 +15,7 @@ export async function requestMissingPartsEmail(buildId, btn) {
   const original = btn ? btn.textContent : null;
   if (btn) { btn.disabled = true; btn.textContent = 'Sending…'; }
   try {
-    await ensureFreshToken();
-    const res = await fetch(`${API_BASE_URL}/builds/${buildId}/email-missing-parts`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', ...authHeader() }
-    });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(data.message || `Request failed (${res.status})`);
-    showToast(data.message || 'Sent - check your inbox for the parts list');
+    showToast(await emailMissingParts(buildId));
     if (btn) btn.textContent = 'Sent ✓';
   } catch (err) {
     showToast(err.message || 'Could not send that email.');

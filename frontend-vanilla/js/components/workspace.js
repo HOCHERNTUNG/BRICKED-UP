@@ -19,11 +19,10 @@ import {
   openAllPanels
 } from '../hooks/state.js';
 import { playSound } from '../hooks/sound.js';
-import { getBuildDetail } from '../api/builds.js';
+import { getBuildDetail, emailMissingParts } from '../api/builds.js';
 import { getInventory, updateInventoryItem, deleteInventoryItem } from '../api/inventory.js';
 import { partImageAttrs } from '../api/partImage.js';
 import { resolveColorTag, contrastTextFor } from '../hooks/state.js';
-import { API_BASE_URL, authHeader } from '../api/client.js';
 
 /**
  * Main Workspace Layout in Vanilla JS
@@ -696,11 +695,11 @@ function renderStandaloneBuild(body, build) {
         emailBtn.disabled = true;
         emailBtn.textContent = 'Sending…';
         try {
-          const res = await fetch(
-            `${API_BASE_URL}/builds/${detail.build_id}/email-missing-parts`,
-            { method: 'POST', headers: { 'Content-Type': 'application/json', ...authHeader() } }
-          );
-          if (!res.ok) throw new Error(`Request failed (${res.status})`);
+          // Shared with the Build Ideas cards, and mock-aware, so this button
+          // works in the offline build too. It used to call the API directly -
+          // a second copy of the same request - and was the only action that
+          // failed when the app ran without a backend.
+          await emailMissingParts(detail.build_id);
           emailBtn.textContent = 'Sent — check your inbox';
         } catch (err) {
           emailBtn.textContent = 'Could not send — try again';
