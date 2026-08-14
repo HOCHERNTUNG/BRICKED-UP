@@ -14,14 +14,16 @@ let candidates = [];
 // Selectable models. An empty id means "whatever the backend has deployed",
 // so the default path is unchanged if the switcher is never touched.
 const MODEL_OPTIONS = [
-  { id: '',    label: 'Default',
-    hint: 'Whichever model is currently deployed' },
-  { id: 'rb1', label: 'Rebrickable',
-    hint: 'Trained on catalogue photographs; the scan is matted onto white to match' },
-  { id: 'rb2', label: 'Rebrickable + viewpoint',
-    hint: 'As Rebrickable, plus perspective warping so the training set is not all one camera angle' },
-  { id: 'v3',  label: 'Original 50-class',
-    hint: 'Trained on the B200C photo dataset. Strong on its own test set, weak on real photos - the domain gap' },
+  // Labels stay short so the row never wraps - the explanation lives on the
+  // tooltip, where it can be as long as it needs to be.
+  { id: '',    label: 'Auto',
+    hint: 'Whichever model is currently deployed as the default' },
+  { id: 'rb1', label: 'RB',
+    hint: 'Rebrickable catalogue photographs. The scanned brick is matted onto white to match that domain.' },
+  { id: 'rb2', label: 'RB+view',
+    hint: 'Rebrickable plus perspective warping, so the training set is not all shot from one camera angle.' },
+  { id: 'v3',  label: 'B200C',
+    hint: 'The original 50-class model, trained on the B200C photo dataset. Scores 0.86 on its own test set and collapses on real photos - this is the domain gap, shown live.' },
 ];
 let selectedModel = '';
 let addedIndices = new Set();

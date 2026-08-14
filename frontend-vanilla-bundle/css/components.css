@@ -2150,33 +2150,43 @@ input[type=number] {
 /* Model switcher. Three models over two datasets, selectable per scan, so the
    same photo can be run through each in turn - the domain-gap result is much
    more convincing demonstrated than described. */
+/* One row, always. Wrapping to a second line pushed the demo buttons to the
+   bottom edge of the panel, which is where they were before the panel was
+   sized to fit them. The chips share the row and shrink instead; the full
+   name stays on the tooltip. */
 .model-switch {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
-  gap: 5px;
-  margin: 10px 0 2px;
+  gap: 4px;
+  margin: 8px 0 2px;
+  overflow: hidden;
 }
 
 .model-switch-label {
-  font-size: 0.6rem;
+  font-size: 0.58rem;
   font-weight: 800;
   text-transform: uppercase;
   letter-spacing: 0.04em;
   color: var(--grey-600);
-  margin-right: 2px;
+  flex: 0 0 auto;
 }
 
 .model-chip {
-  font-size: 0.58rem;
+  font-size: 0.55rem;
   font-weight: 800;
-  padding: 3px 8px;
+  padding: 3px 7px;
   border: 2px solid var(--ink-900);
   border-radius: 999px;
   background: var(--white);
   color: var(--ink-900);
   cursor: pointer;
-  line-height: 1.35;
+  line-height: 1.3;
+  flex: 0 1 auto;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   transition: background-color 0.1s ease, transform 0.08s ease;
 }
 
