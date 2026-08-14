@@ -84,6 +84,48 @@ input, button, select, textarea {
    unobtrusive: the workspace is a full-viewport canvas, so this sits in the
    bottom-right corner and never intercepts pointer events. Uses the theme
    tokens so it stays legible across every theme. */
+/* Offline-mode notice.
+   Bottom-left so it clears the Brickyield pill and the credit line in the
+   opposite corner. Only ever rendered when the app is running on sample
+   data, so on the deployed site it does not exist at all. */
+.offline-banner {
+  position: fixed;
+  left: 12px;
+  bottom: 12px;
+  z-index: 9000;
+  max-width: 340px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 9px 12px;
+  background: var(--lego-yellow, #FFD500);
+  border: 2.5px solid var(--ink-900);
+  border-radius: 10px;
+  box-shadow: 0 3px 0 var(--ink-900);
+  font-family: var(--font-body);
+  font-size: 0.72rem;
+  line-height: 1.35;
+  color: var(--ink-900);
+}
+
+.offline-banner strong {
+  font-family: var(--font-display);
+  font-size: 0.78rem;
+  letter-spacing: 0.01em;
+}
+
+.offline-banner-live {
+  align-self: flex-start;
+  margin-top: 2px;
+  font-weight: 800;
+  color: var(--ink-900);
+  text-underline-offset: 2px;
+}
+
+@media (max-width: 520px) {
+  .offline-banner { max-width: calc(100vw - 24px); font-size: 0.68rem; }
+}
+
 /* Sits INSIDE .corner-overlay's flex column.
    It used to be position:fixed at right:10px/bottom:6px - the same anchor as
    the overlay itself - which took it out of that column and dropped it on top

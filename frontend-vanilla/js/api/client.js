@@ -37,6 +37,38 @@ export const API_BASE_URL = 'https://w45s12yx64.execute-api.ap-southeast-1.amazo
 if (IS_MOCKED) {
   console.info('BRICKED-UP: offline mode - sample data, no AWS calls. ' +
                'Add ?live=1 to use the deployed backend.');
+  showOfflineBanner();
+}
+
+/**
+ * Say plainly, on screen, that this is sample data.
+ *
+ * Offline mode returns a fixed scan result instead of calling Rekognition.
+ * That is the whole point of it - the app has to be runnable with no AWS
+ * account - but on screen it is indistinguishable from a real recognition,
+ * and anyone opening the file to assess the project could reasonably conclude
+ * the results were hardcoded and the integration faked. Nothing else in the
+ * app corrects that impression, so it has to be stated where it cannot be
+ * missed, with a one-click way to switch to the real thing.
+ */
+function showOfflineBanner() {
+  const mount = () => {
+    if (document.querySelector('.offline-banner')) return;
+    const el = document.createElement('div');
+    el.className = 'offline-banner';
+    el.setAttribute('role', 'status');
+    el.innerHTML =
+      '<strong>Offline demo mode</strong>' +
+      '<span>Sample data &mdash; scan results are fixed examples, not AWS Rekognition. ' +
+      'Everything else behaves normally.</span>' +
+      '<a class="offline-banner-live" href="?live=1">Use the live AWS backend</a>';
+    document.body.appendChild(el);
+  };
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', mount, { once: true });
+  } else {
+    mount();
+  }
 }
 
 // ---------------------------------------------------------------------------

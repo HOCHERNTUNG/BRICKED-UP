@@ -15,6 +15,22 @@
   var API_BASE_URL = "https://w45s12yx64.execute-api.ap-southeast-1.amazonaws.com/prod";
   if (IS_MOCKED) {
     console.info("BRICKED-UP: offline mode - sample data, no AWS calls. Add ?live=1 to use the deployed backend.");
+    showOfflineBanner();
+  }
+  function showOfflineBanner() {
+    const mount = () => {
+      if (document.querySelector(".offline-banner")) return;
+      const el = document.createElement("div");
+      el.className = "offline-banner";
+      el.setAttribute("role", "status");
+      el.innerHTML = '<strong>Offline demo mode</strong><span>Sample data &mdash; scan results are fixed examples, not AWS Rekognition. Everything else behaves normally.</span><a class="offline-banner-live" href="?live=1">Use the live AWS backend</a>';
+      document.body.appendChild(el);
+    };
+    if (document.readyState === "loading") {
+      document.addEventListener("DOMContentLoaded", mount, { once: true });
+    } else {
+      mount();
+    }
   }
   var STORE_KEY = "brickedup.session";
   var REFRESH_MARGIN_MS = 5 * 60 * 1e3;
