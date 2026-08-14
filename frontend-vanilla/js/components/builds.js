@@ -1,6 +1,7 @@
 import { getBuilds, getBuildDetail } from '../api/builds.js';
 import { spawnStandalonePanel } from '../hooks/state.js';
 import { partImageAttrs } from '../api/partImage.js';
+import { openLightbox } from '../hooks/lightbox.js';
 import { API_BASE_URL, authHeader, ensureFreshToken } from '../api/client.js';
 import { showToast } from '../hooks/toast.js';
 
@@ -98,6 +99,10 @@ function renderCatalogView(container) {
 
     card.innerHTML = `
       <img src="${build.hero_image_url}" alt="${build.build_name}" class="build-img" />
+      <button type="button" class="build-zoom-btn" title="View this image full size"
+              aria-label="View ${build.build_name} full size">
+        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="11" cy="11" r="7"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line><line x1="11" y1="8" x2="11" y2="14"></line><line x1="8" y1="11" x2="14" y2="11"></line></svg>
+      </button>
       <button type="button" class="build-popout-btn popout-btn" title="View Instructions" style="position: absolute; top: 8px; left: 8px; width: 28px; height: 28px; border-radius: 6px; border: 2.5px solid var(--ink-900); background-color: var(--brick-blue); display: flex; align-items: center; justify-content: center; cursor: pointer; z-index: 5; box-shadow: 0 2.5px 0 var(--ink-900)">
         <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--white)" stroke-width="2.5"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
       </button>
@@ -130,6 +135,11 @@ function renderCatalogView(container) {
         requestMissingPartsEmail(build.build_id, emailBtn);
       };
     }
+
+    card.querySelector('.build-zoom-btn').onclick = (e) => {
+      e.stopPropagation();     // the card itself opens the build detail
+      openLightbox(build.hero_image_url, build.build_name);
+    };
 
     card.querySelector('.popout-btn').onclick = (e) => {
       e.stopPropagation();
@@ -203,11 +213,15 @@ function renderDetailView(container) {
     const detailContent = document.createElement('div');
     detailContent.className = 'detail-content-scroll';
 
-    // Hero banner
+    // Hero banner. Clickable too - by the time someone has opened a build
+    // they are more likely to want a proper look at it, not less.
     const hero = document.createElement('img');
-    hero.className = 'detail-hero';
+    hero.className = 'detail-hero is-zoomable';
     hero.src = activeBuildDetail.hero_image_url;
     hero.alt = activeBuildDetail.build_name;
+    hero.title = 'Click to view full size';
+    hero.onclick = () => openLightbox(activeBuildDetail.hero_image_url,
+                                      activeBuildDetail.build_name);
     detailContent.appendChild(hero);
 
     // Metadata

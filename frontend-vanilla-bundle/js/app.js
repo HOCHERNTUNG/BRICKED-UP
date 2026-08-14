@@ -472,47 +472,62 @@
   var WARP_CHARGE_MS = 780;
   var WARP_PEAK = 16;
   var WARP_OPEN_MS = 620;
-  function playLoginTransition() {
+  function beginLoginWarp() {
     const reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     if (reduce) {
       if (tunnelWarp) tunnelWarp(1);
-      return Promise.resolve();
+      return { open: () => Promise.resolve(), cancel: () => {
+      } };
     }
-    return new Promise((resolve) => {
-      const overlay = document.createElement("div");
-      overlay.className = "login-warp";
-      overlay.innerHTML = '<span class="login-warp-core"></span>';
-      document.body.appendChild(overlay);
-      const core = overlay.firstElementChild;
-      let finished = false;
-      const done = () => {
+    const overlay = document.createElement("div");
+    overlay.className = "login-warp";
+    overlay.innerHTML = '<span class="login-warp-core"></span>';
+    document.body.appendChild(overlay);
+    const core = overlay.firstElementChild;
+    let charging = true;
+    let finished = false;
+    let resolveOpen = null;
+    const teardown = () => {
+      charging = false;
+      if (tunnelWarp) tunnelWarp(1);
+      overlay.classList.add("is-clearing");
+      setTimeout(() => overlay.remove(), 620);
+    };
+    const done = () => {
+      if (finished) return;
+      finished = true;
+      teardown();
+      if (resolveOpen) resolveOpen();
+    };
+    const start = performance.now();
+    const step = (now) => {
+      if (!charging) return;
+      const t = Math.min(1, (now - start) / WARP_CHARGE_MS);
+      const eased = t * t * t;
+      if (tunnelWarp) tunnelWarp(1 + eased * (WARP_PEAK - 1));
+      core.style.setProperty("--charge", String(eased));
+      requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+    return {
+      /** Sign-in succeeded: open the aperture onto the workspace. */
+      open() {
+        if (finished) return Promise.resolve();
+        charging = false;
+        return new Promise((resolve) => {
+          resolveOpen = resolve;
+          core.classList.add("is-opening");
+          core.addEventListener("animationend", done, { once: true });
+          setTimeout(done, WARP_OPEN_MS + 350);
+        });
+      },
+      /** Sign-in failed: unwind without revealing anything. */
+      cancel() {
         if (finished) return;
         finished = true;
-        if (tunnelWarp) tunnelWarp(1);
-        overlay.classList.add("is-clearing");
-        setTimeout(() => overlay.remove(), 620);
-        resolve();
-      };
-      const openAperture = () => {
-        core.classList.add("is-opening");
-        core.addEventListener("animationend", done, { once: true });
-        setTimeout(done, WARP_OPEN_MS + 350);
-      };
-      const start = performance.now();
-      const step = (now) => {
-        const t = Math.min(1, (now - start) / WARP_CHARGE_MS);
-        const eased = t * t * t;
-        if (tunnelWarp) tunnelWarp(1 + eased * (WARP_PEAK - 1));
-        core.style.setProperty("--charge", String(eased));
-        if (t < 1) {
-          requestAnimationFrame(step);
-        } else {
-          openAperture();
-        }
-      };
-      requestAnimationFrame(step);
-      setTimeout(done, WARP_CHARGE_MS + WARP_OPEN_MS + 700);
-    });
+        teardown();
+      }
+    };
   }
   function renderAuth(parentEl) {
     if (activeCancelAnimation) {
@@ -616,9 +631,15 @@
             passwordValue = "";
             authErrorMsg = null;
           } else {
-            const result = await signIn({ email: emailValue, password: passwordValue });
-            await playLoginTransition();
-            setUser(result.user, result.idToken);
+            const warp = beginLoginWarp();
+            try {
+              const result = await signIn({ email: emailValue, password: passwordValue });
+              await warp.open();
+              setUser(result.user, result.idToken);
+            } catch (err) {
+              warp.cancel();
+              throw err;
+            }
           }
         } catch (err) {
           console.error("Auth or rendering error:", err);
@@ -3177,6 +3198,53 @@
     };
   }
 
+  // js/hooks/lightbox.js
+  var openEl = null;
+  function openLightbox(src, caption) {
+    closeLightbox();
+    if (!src) return;
+    const box = document.createElement("div");
+    box.className = "lightbox";
+    box.setAttribute("role", "dialog");
+    box.setAttribute("aria-modal", "true");
+    box.setAttribute("aria-label", caption || "Image");
+    box.innerHTML = `
+    <div class="lightbox-inner">
+      <button type="button" class="lightbox-close font-display" aria-label="Close">&times;</button>
+      <img class="lightbox-img" src="${src}" alt="${escapeAttr2(caption || "")}" />
+      ${caption ? `<div class="lightbox-caption font-display">${escapeHtml4(caption)}</div>` : ""}
+    </div>
+  `;
+    document.body.appendChild(box);
+    openEl = box;
+    const onKey = (e) => {
+      if (e.key === "Escape") closeLightbox();
+    };
+    const onDown = (e) => {
+      if (e.target === box) closeLightbox();
+    };
+    box._cleanup = () => {
+      document.removeEventListener("keydown", onKey);
+      box.removeEventListener("mousedown", onDown);
+    };
+    document.addEventListener("keydown", onKey);
+    box.addEventListener("mousedown", onDown);
+    box.querySelector(".lightbox-close").onclick = closeLightbox;
+    box.querySelector(".lightbox-close").focus();
+  }
+  function closeLightbox() {
+    if (!openEl) return;
+    if (openEl._cleanup) openEl._cleanup();
+    openEl.remove();
+    openEl = null;
+  }
+  function escapeHtml4(s) {
+    return String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  }
+  function escapeAttr2(s) {
+    return escapeHtml4(s).replace(/'/g, "&#39;");
+  }
+
   // js/components/builds.js
   async function requestMissingPartsEmail(buildId, btn) {
     const original = btn ? btn.textContent : null;
@@ -3252,6 +3320,10 @@
       card.onclick = () => selectBuild(build2.build_id, container);
       card.innerHTML = `
       <img src="${build2.hero_image_url}" alt="${build2.build_name}" class="build-img" />
+      <button type="button" class="build-zoom-btn" title="View this image full size"
+              aria-label="View ${build2.build_name} full size">
+        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="11" cy="11" r="7"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line><line x1="11" y1="8" x2="11" y2="14"></line><line x1="8" y1="11" x2="14" y2="11"></line></svg>
+      </button>
       <button type="button" class="build-popout-btn popout-btn" title="View Instructions" style="position: absolute; top: 8px; left: 8px; width: 28px; height: 28px; border-radius: 6px; border: 2.5px solid var(--ink-900); background-color: var(--brick-blue); display: flex; align-items: center; justify-content: center; cursor: pointer; z-index: 5; box-shadow: 0 2.5px 0 var(--ink-900)">
         <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--white)" stroke-width="2.5"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
       </button>
@@ -3281,6 +3353,10 @@
           requestMissingPartsEmail(build2.build_id, emailBtn);
         };
       }
+      card.querySelector(".build-zoom-btn").onclick = (e) => {
+        e.stopPropagation();
+        openLightbox(build2.hero_image_url, build2.build_name);
+      };
       card.querySelector(".popout-btn").onclick = (e) => {
         e.stopPropagation();
         spawnStandalonePanel("build", {
@@ -3344,9 +3420,14 @@
       const detailContent = document.createElement("div");
       detailContent.className = "detail-content-scroll";
       const hero = document.createElement("img");
-      hero.className = "detail-hero";
+      hero.className = "detail-hero is-zoomable";
       hero.src = activeBuildDetail.hero_image_url;
       hero.alt = activeBuildDetail.build_name;
+      hero.title = "Click to view full size";
+      hero.onclick = () => openLightbox(
+        activeBuildDetail.hero_image_url,
+        activeBuildDetail.build_name
+      );
       detailContent.appendChild(hero);
       const title = document.createElement("h4");
       title.className = "detail-title font-display";

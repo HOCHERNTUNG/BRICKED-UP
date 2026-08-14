@@ -56,61 +56,77 @@ const WARP_OPEN_MS = 620;     // aperture expanding into the workspace
  *      grows out of exactly the point everything has been rushing toward, it
  *      reads as arriving somewhere rather than as a new layer covering things.
  */
-export function playLoginTransition() {
+export function beginLoginWarp() {
   const reduce = window.matchMedia
     && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   if (reduce) {
     if (tunnelWarp) tunnelWarp(1);
-    return Promise.resolve();
+    return { open: () => Promise.resolve(), cancel: () => {} };
   }
 
-  return new Promise((resolve) => {
-    const overlay = document.createElement('div');
-    overlay.className = 'login-warp';
-    overlay.innerHTML = '<span class="login-warp-core"></span>';
-    document.body.appendChild(overlay);
-    const core = overlay.firstElementChild;
+  const overlay = document.createElement('div');
+  overlay.className = 'login-warp';
+  overlay.innerHTML = '<span class="login-warp-core"></span>';
+  document.body.appendChild(overlay);
+  const core = overlay.firstElementChild;
 
-    let finished = false;
-    const done = () => {
+  let charging = true;
+  let finished = false;
+  let resolveOpen = null;
+
+  const teardown = () => {
+    charging = false;
+    if (tunnelWarp) tunnelWarp(1);        // leave the tunnel as we found it
+    overlay.classList.add('is-clearing');
+    setTimeout(() => overlay.remove(), 620);
+  };
+
+  const done = () => {
+    if (finished) return;
+    finished = true;
+    teardown();
+    if (resolveOpen) resolveOpen();
+  };
+
+  // Phase 1, driven from JS because it has to steer the canvas, which no CSS
+  // animation can reach. It runs for as long as the request takes: once the
+  // ramp reaches its peak it HOLDS there rather than stopping, so a slow
+  // network reads as a longer fall instead of an animation that finished and
+  // is waiting around.
+  const start = performance.now();
+  const step = (now) => {
+    if (!charging) return;
+    const t = Math.min(1, (now - start) / WARP_CHARGE_MS);
+    const eased = t * t * t;                      // slow build, hard finish
+    if (tunnelWarp) tunnelWarp(1 + eased * (WARP_PEAK - 1));
+    core.style.setProperty('--charge', String(eased));
+    requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
+
+  return {
+    /** Sign-in succeeded: open the aperture onto the workspace. */
+    open() {
+      if (finished) return Promise.resolve();
+      charging = false;
+      return new Promise((resolve) => {
+        resolveOpen = resolve;
+        // Phase 2 is a CSS animation so the browser can run the scale on the
+        // compositor, which stays smooth even while the canvas is busy.
+        core.classList.add('is-opening');
+        core.addEventListener('animationend', done, { once: true });
+        // rAF does not run in a hidden tab, and a dropped animationend would
+        // otherwise strand the user on the login screen for good.
+        setTimeout(done, WARP_OPEN_MS + 350);
+      });
+    },
+    /** Sign-in failed: unwind without revealing anything. */
+    cancel() {
       if (finished) return;
       finished = true;
-      if (tunnelWarp) tunnelWarp(1);      // leave the tunnel as we found it
-      overlay.classList.add('is-clearing');
-      setTimeout(() => overlay.remove(), 620);
-      resolve();
-    };
-
-    // Phase 2 is a CSS animation so the browser can run the scale on the
-    // compositor, which keeps it smooth even while the canvas is busy.
-    const openAperture = () => {
-      core.classList.add('is-opening');
-      core.addEventListener('animationend', done, { once: true });
-      setTimeout(done, WARP_OPEN_MS + 350);
-    };
-
-    // Phase 1 is driven from JS because it has to steer the canvas, which no
-    // CSS animation can reach.
-    const start = performance.now();
-    const step = (now) => {
-      const t = Math.min(1, (now - start) / WARP_CHARGE_MS);
-      const eased = t * t * t;                       // slow build, hard finish
-      if (tunnelWarp) tunnelWarp(1 + eased * (WARP_PEAK - 1));
-      core.style.setProperty('--charge', String(eased));
-      if (t < 1) {
-        requestAnimationFrame(step);
-      } else {
-        openAperture();
-      }
-    };
-    requestAnimationFrame(step);
-
-    // Never strand the user on the login screen if the animation is dropped
-    // (background tab, reduced GPU, interrupted paint). rAF does not run in a
-    // hidden tab at all, so this is the only thing that resolves the promise
-    // if the user switches away mid-sign-in.
-    setTimeout(done, WARP_CHARGE_MS + WARP_OPEN_MS + 700);
-  });
+      teardown();
+    },
+  };
 }
 
 export function renderAuth(parentEl) {
@@ -252,11 +268,26 @@ export function renderAuth(parentEl) {
           passwordValue = '';
           authErrorMsg = null;
         } else {
-          const result = await signIn({ email: emailValue, password: passwordValue });
-          // Play the transition BEFORE swapping to the workspace, so the
-          // expanding aperture covers the render rather than competing with it.
-          await playLoginTransition();
-          setUser(result.user, result.idToken);
+          // Start the warp BEFORE the request, not after it.
+          //
+          // Waiting for sign-in to return meant the charge could only begin
+          // once the network was already done, so the acceleration had to be
+          // squeezed into the moment before the workspace appeared. Starting
+          // it here spends the request's own latency on the zoom - which is
+          // dead time otherwise - and the aperture opens when the credentials
+          // come back. The charge loops until then, so a slow connection
+          // gives a longer fall rather than a stutter.
+          const warp = beginLoginWarp();
+          try {
+            const result = await signIn({ email: emailValue, password: passwordValue });
+            // Opens the aperture over the render, so the workspace is revealed
+            // by the animation rather than appearing beside it.
+            await warp.open();
+            setUser(result.user, result.idToken);
+          } catch (err) {
+            warp.cancel();
+            throw err;
+          }
         }
       } catch (err) {
         console.error("Auth or rendering error:", err);
@@ -318,7 +349,7 @@ function initBrickTunnelAnimation(canvas) {
   const ctx = canvas.getContext('2d');
   let animationFrameId = null;
 
-  // Warp multiplier, driven by playLoginTransition. 1 is the idle drift the
+  // Warp multiplier, driven by beginLoginWarp. 1 is the idle drift the
   // login screen sits at; the sign-in transition ramps it up so the tunnel
   // the user has been looking at all along is the thing that accelerates,
   // rather than a separate effect appearing on top of it.
