@@ -486,6 +486,22 @@
   var WARP_CHARGE_MS = 780;
   var WARP_PEAK = 16;
   var WARP_OPEN_MS = 620;
+  var WARP_SEEN_KEY = "brickedup.warpSeen";
+  var WARP_MIN_FIRST_MS = 1500;
+  var WARP_MIN_REPEAT_MS = 320;
+  function warpSeenThisSession() {
+    try {
+      return sessionStorage.getItem(WARP_SEEN_KEY) === "1";
+    } catch (_) {
+      return false;
+    }
+  }
+  function markWarpSeen() {
+    try {
+      sessionStorage.setItem(WARP_SEEN_KEY, "1");
+    } catch (_) {
+    }
+  }
   function beginLoginWarp() {
     const reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     if (reduce) {
@@ -498,6 +514,9 @@
     overlay.innerHTML = '<span class="login-warp-core"></span>';
     document.body.appendChild(overlay);
     const core = overlay.firstElementChild;
+    const firstOfSession = !warpSeenThisSession();
+    const minCharge = firstOfSession ? WARP_MIN_FIRST_MS : WARP_MIN_REPEAT_MS;
+    const chargeMs = firstOfSession ? WARP_CHARGE_MS : 260;
     let charging = true;
     let finished = false;
     let resolveOpen = null;
@@ -516,23 +535,29 @@
     const start = performance.now();
     const step = (now) => {
       if (!charging) return;
-      const t = Math.min(1, (now - start) / WARP_CHARGE_MS);
+      const t = Math.min(1, (now - start) / chargeMs);
       const eased = t * t * t;
       if (tunnelWarp) tunnelWarp(1 + eased * (WARP_PEAK - 1));
       core.style.setProperty("--charge", String(eased));
       requestAnimationFrame(step);
     };
     requestAnimationFrame(step);
+    const openAperture = () => {
+      charging = false;
+      core.classList.add("is-opening");
+      core.addEventListener("animationend", done, { once: true });
+      setTimeout(done, WARP_OPEN_MS + 350);
+    };
     return {
       /** Sign-in succeeded: open the aperture onto the workspace. */
       open() {
         if (finished) return Promise.resolve();
-        charging = false;
+        markWarpSeen();
+        const remaining = Math.max(0, minCharge - (performance.now() - start));
         return new Promise((resolve) => {
           resolveOpen = resolve;
-          core.classList.add("is-opening");
-          core.addEventListener("animationend", done, { once: true });
-          setTimeout(done, WARP_OPEN_MS + 350);
+          if (remaining > 0) setTimeout(openAperture, remaining);
+          else openAperture();
         });
       },
       /** Sign-in failed: unwind without revealing anything. */

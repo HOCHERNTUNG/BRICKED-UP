@@ -35,6 +35,39 @@ const WARP_CHARGE_MS = 780;   // accelerating toward the singularity
 const WARP_PEAK = 16;         // multiple of idle tunnel speed at the end
 const WARP_OPEN_MS = 620;     // aperture expanding into the workspace
 
+// The long charge plays once per session; later sign-ins get a short one.
+//
+// Tying the length to the request alone made it accidental rather than
+// designed: the first sign-in hits a cold Lambda and takes seconds, so the
+// charge ran long, while every later one returned in a few hundred
+// milliseconds and the acceleration was over before it registered. It looked
+// like the animation had been switched off.
+//
+// Once per session is also the right behaviour on its own terms. The full
+// sequence is worth watching the first time and becomes an obstacle between
+// you and your inventory by the third, so a returning user gets the same
+// motion at a fraction of the length rather than a different effect.
+//
+// sessionStorage, not localStorage: a new tab or a new day should feel like
+// arriving again.
+const WARP_SEEN_KEY = 'brickedup.warpSeen';
+const WARP_MIN_FIRST_MS = 1500;   // hold the fall even if auth returns sooner
+const WARP_MIN_REPEAT_MS = 320;   // enough to read as motion, not as a stall
+
+function warpSeenThisSession() {
+  try {
+    return sessionStorage.getItem(WARP_SEEN_KEY) === '1';
+  } catch (_) {
+    return false;                 // private mode: treat every sign-in as first
+  }
+}
+
+function markWarpSeen() {
+  try {
+    sessionStorage.setItem(WARP_SEEN_KEY, '1');
+  } catch (_) { /* nothing to do; the animation still played */ }
+}
+
 /**
  * Sign-in transition: fly into the tunnel, then open out of it.
  *
@@ -70,6 +103,14 @@ export function beginLoginWarp() {
   document.body.appendChild(overlay);
   const core = overlay.firstElementChild;
 
+  // Decided once, at the start, so the length is a property of the session
+  // rather than of however long the network happened to take.
+  const firstOfSession = !warpSeenThisSession();
+  const minCharge = firstOfSession ? WARP_MIN_FIRST_MS : WARP_MIN_REPEAT_MS;
+  // A repeat sign-in reaches full speed quickly, so the same acceleration is
+  // compressed rather than replaced by a different, flatter effect.
+  const chargeMs = firstOfSession ? WARP_CHARGE_MS : 260;
+
   let charging = true;
   let finished = false;
   let resolveOpen = null;
@@ -96,7 +137,7 @@ export function beginLoginWarp() {
   const start = performance.now();
   const step = (now) => {
     if (!charging) return;
-    const t = Math.min(1, (now - start) / WARP_CHARGE_MS);
+    const t = Math.min(1, (now - start) / chargeMs);
     const eased = t * t * t;                      // slow build, hard finish
     if (tunnelWarp) tunnelWarp(1 + eased * (WARP_PEAK - 1));
     core.style.setProperty('--charge', String(eased));
@@ -104,20 +145,32 @@ export function beginLoginWarp() {
   };
   requestAnimationFrame(step);
 
+  const openAperture = () => {
+    charging = false;
+    // Phase 2 is a CSS animation so the browser can run the scale on the
+    // compositor, which stays smooth even while the canvas is busy.
+    core.classList.add('is-opening');
+    core.addEventListener('animationend', done, { once: true });
+    // rAF does not run in a hidden tab, and a dropped animationend would
+    // otherwise strand the user on the login screen for good.
+    setTimeout(done, WARP_OPEN_MS + 350);
+  };
+
   return {
     /** Sign-in succeeded: open the aperture onto the workspace. */
     open() {
       if (finished) return Promise.resolve();
-      charging = false;
+      markWarpSeen();
+      // Hold for the rest of the minimum if the request beat it. Without this
+      // the whole sequence lasts exactly as long as the network did, so a warm
+      // backend cut the acceleration off before it was visible - which is why
+      // it appeared to only work on the very first sign-in, when the Lambda
+      // was cold and slow.
+      const remaining = Math.max(0, minCharge - (performance.now() - start));
       return new Promise((resolve) => {
         resolveOpen = resolve;
-        // Phase 2 is a CSS animation so the browser can run the scale on the
-        // compositor, which stays smooth even while the canvas is busy.
-        core.classList.add('is-opening');
-        core.addEventListener('animationend', done, { once: true });
-        // rAF does not run in a hidden tab, and a dropped animationend would
-        // otherwise strand the user on the login screen for good.
-        setTimeout(done, WARP_OPEN_MS + 350);
+        if (remaining > 0) setTimeout(openAperture, remaining);
+        else openAperture();
       });
     },
     /** Sign-in failed: unwind without revealing anything. */
