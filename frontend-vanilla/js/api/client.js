@@ -12,22 +12,38 @@
 //
 // Chosen by, in order:
 //   ?mock=1 / ?live=1     explicit, and wins over everything
-//   file:// or localhost  offline, because that is a developer or a marker
-//   anything else         live, because that is the deployed site
+//   a known AWS-backed host   live
+//   anything else             offline
 //
-// The point of the host check is that "download it and open index.html"
-// should just work. Requiring someone to flip a constant and re-run a build
-// step first is exactly the instruction people skip.
+// The default is offline ON PURPOSE, and it used to be the other way round.
+// Only the CloudFront distribution and localhost are on the API's CORS
+// allowlist, so any other host - Netlify, GitHub Pages, a colleague's laptop,
+// a file:// copy - cannot reach the backend even though the code will happily
+// try. The browser then blocks the request and the user sees nothing but
+// "Failed to fetch" on the sign-in screen, which looks like a broken site
+// rather than a deliberately self-contained one.
+//
+// Defaulting to offline means the same bundle can be dropped on ANY static
+// host and just work, using the bundled sample data. Somewhere that genuinely
+// is wired to AWS says so explicitly, either by being on the list below or by
+// carrying ?live=1.
+const LIVE_HOSTS = [
+  'dic4bftd9x6zp.cloudfront.net',   // the deployed distribution
+];
+export const LIVE_SITE_URL = 'https://dic4bftd9x6zp.cloudfront.net';
+
 function resolveMockMode() {
   try {
     const q = new URLSearchParams(window.location.search);
     if (q.get('mock') === '1') return true;
     if (q.get('live') === '1') return false;
     const h = window.location.hostname;
-    return window.location.protocol === 'file:' ||
-           h === 'localhost' || h === '127.0.0.1' || h === '' || h === '[::1]';
+    if (LIVE_HOSTS.includes(h)) return false;
+    // localhost is a developer, who may want either; default it to offline and
+    // let ?live=1 opt in, which is what RUNNING_LOCALLY.md documents.
+    return true;
   } catch (_) {
-    return false;
+    return true;
   }
 }
 
@@ -52,6 +68,18 @@ if (IS_MOCKED) {
  * missed, with a one-click way to switch to the real thing.
  */
 function showOfflineBanner() {
+  // Where "see the real thing" should point depends on whether this host can
+  // actually reach the backend. Only localhost is on the CORS allowlist
+  // alongside the distribution itself, so offering ?live=1 anywhere else just
+  // swaps working sample data for "Failed to fetch". Everywhere else is sent
+  // to the deployed site instead.
+  const h = window.location.hostname;
+  const canReachApi = h === 'localhost' || h === '127.0.0.1' || h === '[::1]';
+  const link = canReachApi
+    ? '<a class="offline-banner-live" href="?live=1">Use the live AWS backend</a>'
+    : '<a class="offline-banner-live" href="' + LIVE_SITE_URL +
+      '" target="_blank" rel="noopener">See the live AWS version</a>';
+
   const mount = () => {
     if (document.querySelector('.offline-banner')) return;
     const el = document.createElement('div');
@@ -60,8 +88,7 @@ function showOfflineBanner() {
     el.innerHTML =
       '<strong>Offline demo mode</strong>' +
       '<span>Sample data &mdash; scan results are fixed examples, not AWS Rekognition. ' +
-      'Everything else behaves normally.</span>' +
-      '<a class="offline-banner-live" href="?live=1">Use the live AWS backend</a>';
+      'Everything else behaves normally.</span>' + link;
     document.body.appendChild(el);
   };
   if (document.readyState === 'loading') {

@@ -98,4 +98,15 @@ indexHtml = indexHtml.replace(/(href|src)="((?:css|js)\/[^"?]+)"/g, (match, attr
 
 fs.writeFileSync(path.join(destDir, 'index.html'), indexHtml, 'utf8');
 console.log('index.html processed and written (assets cache-busted).');
+
+// 8. Netlify (and any other static host) fallback.
+//
+// CloudFront is configured to answer 403/404 with index.html so a refresh or a
+// deep link still loads the app. A plain static host does not do that by
+// default, so the same bundle deployed to Netlify would 404 on anything that
+// is not exactly "/". This file is Netlify's equivalent of that rule and is
+// simply ignored by hosts that do not understand it.
+fs.writeFileSync(path.join(destDir, '_redirects'), '/*  /index.html  200\n',
+                 'utf8');
+console.log('_redirects written for static-host fallback.');
 console.log('Build completed! Files are in: ' + destDir);

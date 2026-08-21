@@ -1,14 +1,20 @@
 (() => {
   // js/api/client.js
+  var LIVE_HOSTS = [
+    "dic4bftd9x6zp.cloudfront.net"
+    // the deployed distribution
+  ];
+  var LIVE_SITE_URL = "https://dic4bftd9x6zp.cloudfront.net";
   function resolveMockMode() {
     try {
       const q = new URLSearchParams(window.location.search);
       if (q.get("mock") === "1") return true;
       if (q.get("live") === "1") return false;
       const h = window.location.hostname;
-      return window.location.protocol === "file:" || h === "localhost" || h === "127.0.0.1" || h === "" || h === "[::1]";
+      if (LIVE_HOSTS.includes(h)) return false;
+      return true;
     } catch (_) {
-      return false;
+      return true;
     }
   }
   var IS_MOCKED = resolveMockMode();
@@ -18,12 +24,15 @@
     showOfflineBanner();
   }
   function showOfflineBanner() {
+    const h = window.location.hostname;
+    const canReachApi = h === "localhost" || h === "127.0.0.1" || h === "[::1]";
+    const link = canReachApi ? '<a class="offline-banner-live" href="?live=1">Use the live AWS backend</a>' : '<a class="offline-banner-live" href="' + LIVE_SITE_URL + '" target="_blank" rel="noopener">See the live AWS version</a>';
     const mount = () => {
       if (document.querySelector(".offline-banner")) return;
       const el = document.createElement("div");
       el.className = "offline-banner";
       el.setAttribute("role", "status");
-      el.innerHTML = '<strong>Offline demo mode</strong><span>Sample data &mdash; scan results are fixed examples, not AWS Rekognition. Everything else behaves normally.</span><a class="offline-banner-live" href="?live=1">Use the live AWS backend</a>';
+      el.innerHTML = "<strong>Offline demo mode</strong><span>Sample data &mdash; scan results are fixed examples, not AWS Rekognition. Everything else behaves normally.</span>" + link;
       document.body.appendChild(el);
     };
     if (document.readyState === "loading") {
